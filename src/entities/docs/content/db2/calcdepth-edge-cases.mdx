@@ -1,212 +1,208 @@
 <Slide kick="DBX · 원인 분석">
-<h1>calcDepth 엣지케이스는<br/>왜 생기나</h1>
-<Lead>순환·중복 간선·다중 뎁스·고아 노드 — 이 데이터들이 **어디서 흘러들어오고**,
-기존 코드의 **정확히 어느 줄**이 왜 무너지는지를 추적한다.</Lead>
+<h1>calcDepth는 왜<br/>무한재귀에 빠지나</h1>
+<Lead>순환 데이터가 들어왔을 때 기존 코드가 **한 스텝씩 어떻게 굴러떨어지는지** 추적하고,
+그런 데이터가 애초에 왜 오는지, 나머지 엣지케이스는 어떤 원리인지 정리한다.</Lead>
 <Muted>해법 비교는 별도 덱(calcDepth — tree DFS vs parentMap) 참조 · 2026-08-12</Muted>
 </Slide>
 
-<Slide kick="전제">
-## calcDepth가 믿고 있는 가정 4개
+<Slide kick="문제의 데이터">
+## 정상 데이터 vs 순환 데이터
 
-<Lead>기존 코드는 간선 데이터가 **완벽한 트리**라고 가정한다. 코드 어디에도 검증이 없다 — 가정이 깨지면 그대로 무너진다.</Lead>
+<Lead>`EXPLAIN_STREAM` 이 주는 건 (source, target) 간선 행들이다. 같은 3행인데 마지막 한 행이 다르다.</Lead>
 
-| # | 가정 | 깨지면 |
-|---|---|---|
-| ① | 루트는 항상 노드 1이고, 모든 노드가 1에서 닿는다 | <B>고아 노드</B> — depth 누락 |
-| ② | 노드마다 도달 경로는 하나뿐이다 | <B>다중 뎁스</B> — depth가 운에 좌우 |
-| ③ | 간선을 따라가면 반드시 끝(잎)이 나온다 | <B>순환·자기참조</B> — 무한재귀 |
-| ④ | 같은 간선은 한 번만 나온다 | <B>중복 간선</B> — 같은 서브트리 반복 계산 |
+<svg className="dg" viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg">
+  <text x="170" y="30" textAnchor="middle" className="dg-t">정상 (아래로만 흐름)</text>
+  <text x="170" y="60" textAnchor="middle" className="dg-mono">1 ← 2</text>
+  <text x="170" y="85" textAnchor="middle" className="dg-mono">2 ← 3</text>
+  <text x="170" y="110" textAnchor="middle" className="dg-mono">3 ← 4</text>
+  <circle cx="170" cy="145" r="15" className="dg-node"/><text x="170" y="150" className="dg-nt">1</text>
+  <path d="M170 160 L170 175" className="dg-line"/>
+  <circle cx="170" cy="190" r="15" className="dg-node leaf"/><text x="170" y="195" className="dg-nt">2…</text>
 
-<Note>이 가정들은 "실행계획은 트리"라는 직관에서 왔다. 그런데 에이전트가 받는 건 실행계획이 아니라 — <b>EXPLAIN 테이블에서 SELECT 한 행들</b>이다. 이 간극이 모든 엣지케이스의 뿌리다.</Note>
-</Slide>
+  <text x="540" y="30" textAnchor="middle" className="dg-t">순환 (서로가 서로의 입력)</text>
+  <text x="540" y="60" textAnchor="middle" className="dg-mono">1 ← 2</text>
+  <text x="540" y="85" textAnchor="middle" className="dg-mono">2 ← 3</text>
+  <text x="540" y="110" textAnchor="middle" className="dg-badf" style={{fontFamily:'var(--mono)',fontSize:'13px',fontWeight:700}}>3 ← 2   ← 이 한 행</text>
+  <circle cx="480" cy="165" r="15" className="dg-node"/><text x="480" y="170" className="dg-nt">2</text>
+  <circle cx="600" cy="165" r="15" className="dg-node"/><text x="600" y="170" className="dg-nt">3</text>
+  <path d="M495 158 C530 140, 565 140, 588 156" className="dg-line"/>
+  <path d="M585 174 C550 192, 515 192, 492 176" className="dg-line"/>
+  <text x="540" y="215" textAnchor="middle" className="dg-tm">2 → 3 → 2 → 3 → … 끝이 없다</text>
+</svg>
 
-<Slide kick="데이터 파이프라인">
-## 간선 데이터가 오는 길 — 틈은 세 군데
-
-<Flow steps={[
-  { t: 'EXPLAIN_FROM_SECTION', d: 'EXPLAIN_* 테이블에 write' },
-  { t: 'EXPLAIN_STREAM', d: '고객 DB의 공유 staging 테이블', bad: true },
-  { t: '3-way JOIN SELECT', d: 'ORDER BY 없음', bad: true },
-  { t: 'collectRow', d: 'rank 필터가 절반만 적용', bad: true },
-  { t: 'calcDepth', d: '가정 4개를 그대로 믿음' },
-]} />
-
-- **틈 1 — 공유 테이블**: EXPLAIN_STREAM은 에이전트 전용이 아니다. 같은 스키마로 EXPLAIN 하는 다른 도구·동시 요청·과거 잔여 행과 **한 테이블을 같이 쓴다**
-- **틈 2 — 정렬 미보장**: 최종 SELECT에 ORDER BY가 없어 **행 순서가 매번 다를 수 있다**
-- **틈 3 — 반쪽 필터**: rank=1 필터가 `targetMap`에만 걸리고 `tree`에는 안 걸린다
-
-이제 틈 하나씩 열어본다.
-</Slide>
-
-<Slide kick="틈 2 부터" err>
-## 행 순서는 아무도 보장하지 않는다
-
-```sql
-WITH RankedRows AS (
-    SELECT ... ,
-        ROW_NUMBER() OVER (PARTITION BY est.target_id
-            ORDER BY eop.total_cost DESC, est.STREAM_COUNT DESC) AS rank
-    FROM EXPLAIN_STATEMENT stt JOIN EXPLAIN_OPERATOR eop JOIN EXPLAIN_STREAM est ...
-)
-SELECT * FROM RankedRows        -- ← 바깥 ORDER BY 가 없다
-```
-
-- 안쪽 `ORDER BY` 는 **rank 번호 매기는 용도**일 뿐, 결과 행의 출력 순서와 무관
-- SQL 표준: ORDER BY 없는 SELECT의 행 순서는 **비결정** — 실행계획·페이지 배치 따라 매번 달라질 수 있다
-
-<Warn>이 순서가 그대로 <code>tree</code> 의 자식 리스트 순서가 되고, 그게 DFS 방문 순서가 되고, 그게 depth가 된다.
-즉 <b>"같은 plan을 두 번 조회했는데 depth가 다르다"</b>가 구조적으로 가능한 상태다. 단일 경로 트리에선 티가 안 나지만 — 경로가 둘이 되는 순간(가정 ②) 폭로된다.</Warn>
-</Slide>
-
-<Slide kick="틈 3">
-## collectRow — rank 필터가 절반만 적용된다
+이 3행이 `collectRow` 를 거치면 tree는 이렇게 된다:
 
 ```java
-private static void collectRow(ResultSet rs, PlanContext ctx) throws Exception {
-    int targetId = rs.getInt("target_id");
-    int sourceId = rs.getInt("source_id");
-    int rank     = rs.getInt("rank");
-    ctx.tree.computeIfAbsent(targetId, k -> new ArrayList<>()).add(sourceId);
-    if (targetId == 1) ctx.parentMap.put(1, -1);
-    ctx.parentMap.put(sourceId, targetId);
-    if (rank == 1) {
-        ctx.targetMap.computeIfAbsent(targetId, k -> new ArrayList<>()).add(...);
+tree:  1 → [2]     // 1의 자식은 2
+       2 → [3]     // 2의 자식은 3
+       3 → [2]     // 3의 자식은 2  ← 고리 완성
+```
+</Slide>
+
+<Slide kick="핵심" err>
+## 종료 조건이 딱 하나뿐이다
+
+```java
+private static void calcDepth(Map<Integer, List<Integer>> tree,
+                              int node, int depth,
+                              Map<Integer, Integer> depthMap) {
+    depthMap.put(node, depth);
+    if (tree.containsKey(node)) {          // ← 유일한 브레이크: "자식이 없다"
+        for (Integer child : tree.get(node)) {
+            if (child != -1) {
+                calcDepth(tree, child, depth + 1, depthMap);
+            }
+        }
     }
 }
 ```
 
-- **5행** `tree` 적재 — <b>rank 조건 없음</b>. rank 2·3짜리 행도 전부 자식 목록에 들어간다
-- **7행** `parentMap` 적재 — 역시 rank 없음 + `put` 이라 <b>마지막 행이 이긴다</b>
-- **8~10행** `targetMap`(화면에 그릴 노드)만 rank=1 필터
+- **6행** 이 재귀가 멈추는 길은 단 하나 — `tree` 에 자식 목록이 **없는** 노드(잎)에 도달하는 것
+- **4행** `depthMap.put` 은 "왔던 곳인지" 확인하지 않는다 — 기록일 뿐, **브레이크가 아니다**
 
-<Note>rank 2·3 행이 왜 존재하나 — 한 연산자 쌍 사이에 stream이 여러 개일 수 있어서다 (ROW_NUMBER가 그래서 필요했던 것).
-그 행들이 <b>화면에서는 걸러지는데 depth 계산에는 들어간다</b> — 가정 ④(중복 간선)가 여기서 깨진다.</Note>
+<Warn>그런데 고리 안의 노드는 <b>전부 자식이 있다</b> (2의 자식 3, 3의 자식 2).
+잎이 없는 길 = 종료 조건이 영원히 성립하지 않는 길. 코드가 잘못 도는 게 아니라, <b>설계된 유일한 출구가 이 데이터엔 존재하지 않는 것</b>이다.</Warn>
 </Slide>
 
-<Slide kick="케이스 ②" err>
-## 다중 뎁스 — plan은 트리가 아니라 DAG일 수 있다
+<Slide kick="스텝 추적" err>
+## 굴러떨어지는 과정 — 한 호출씩
 
-<Lead>한 연산자의 출력이 **두 연산자에서 소비**되면(공유 서브플랜), 그 노드로 가는 간선이 두 개가 된다.</Lead>
+tree = \{ 1→[2], 2→[3], 3→[2] \} 에서 `calcDepth(1, 0)` 을 부르면:
+
+| 스텝 | 호출 | depthMap 상태 | 스택 깊이 |
+|---|---|---|---|
+| 1 | calcDepth(**1**, 0) | \{1=0\} | 1 |
+| 2 | └ calcDepth(**2**, 1) | \{1=0, 2=1\} | 2 |
+| 3 | &nbsp;&nbsp;└ calcDepth(**3**, 2) | \{1=0, 2=1, 3=2\} | 3 |
+| 4 | &nbsp;&nbsp;&nbsp;&nbsp;└ calcDepth(**2**, 3) | \{1=0, <B>2=3</B>, 3=2\} | 4 |
+| 5 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└ calcDepth(**3**, 4) | \{1=0, 2=3, <B>3=4</B>\} | 5 |
+| 6 | … calcDepth(**2**, 5) | 2와 3만 계속 덮어씀 | 6 |
+| ⋮ | ⋮ | depth 값만 무한히 커짐 | ⋮ |
+
+- **스텝 4가 갈림길** — 3의 자식 2는 이미 다녀온 노드인데, 아무 검사가 없어 **그냥 다시 들어간다**
+- depthMap은 키 2·3을 번갈아 **덮어쓸 뿐** 커지지 않는다 — 메모리로는 이상이 안 보인다
+- 대신 **호출 스택**이 스텝마다 한 칸씩 쌓인다 — 이게 진짜 비용
+</Slide>
+
+<Slide kick="폭발 지점" err>
+## 스택이 터지는 순간
 
 <svg className="dg" viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg">
-  <rect x="290" y="15" width="140" height="40" rx="9" className="dg-box acc"/>
-  <text x="360" y="40" textAnchor="middle" className="dg-t">RETURN (1)</text>
-  <path d="M320 55 L235 100" className="dg-line"/>
-  <path d="M400 55 L485 100" className="dg-line"/>
-  <rect x="150" y="105" width="150" height="40" rx="9" className="dg-box"/>
-  <text x="225" y="130" textAnchor="middle" className="dg-t">HSJOIN (2)</text>
-  <rect x="420" y="105" width="150" height="40" rx="9" className="dg-box"/>
-  <text x="495" y="130" textAnchor="middle" className="dg-t">NLJOIN (3)</text>
-  <path d="M235 145 L330 195" className="dg-line"/>
-  <path d="M485 145 L390 195" className="dg-line"/>
-  <rect x="280" y="195" width="160" height="42" rx="9" className="dg-box good"/>
-  <text x="360" y="213" textAnchor="middle" className="dg-t">TBSCAN (4)</text>
-  <text x="360" y="229" textAnchor="middle" className="dg-tm">한 번 읽어 양쪽에 공급</text>
+  <rect x="80" y="195" width="230" height="30" rx="6" className="dg-box"/><text x="195" y="215" textAnchor="middle" className="dg-mono">calcDepth(1, 0)</text>
+  <rect x="80" y="160" width="230" height="30" rx="6" className="dg-box"/><text x="195" y="180" textAnchor="middle" className="dg-mono">calcDepth(2, 1)</text>
+  <rect x="80" y="125" width="230" height="30" rx="6" className="dg-box"/><text x="195" y="145" textAnchor="middle" className="dg-mono">calcDepth(3, 2)</text>
+  <rect x="80" y="90" width="230" height="30" rx="6" className="dg-box"/><text x="195" y="110" textAnchor="middle" className="dg-mono">calcDepth(2, 3)</text>
+  <rect x="80" y="55" width="230" height="30" rx="6" className="dg-box bad"/><text x="195" y="75" textAnchor="middle" className="dg-mono">… 수만 개 …</text>
+  <text x="195" y="35" textAnchor="middle" className="dg-badf" style={{fontFamily:'var(--sans)',fontSize:'14px',fontWeight:700}}>💥 StackOverflowError</text>
+  <text x="430" y="80" className="dg-t">JVM 스레드 스택은 유한 (기본 ~512KB·1MB)</text>
+  <text x="430" y="105" className="dg-tm">프레임 하나당 수십 byte × 수만 번 = 한도 초과</text>
+  <text x="430" y="150" className="dg-t">그리고 이건 Exception 이 아니라 Error 다</text>
+  <text x="430" y="175" className="dg-tm">catch (Exception e) 로는 안 잡힌다</text>
+  <text x="430" y="195" className="dg-tm">→ plan 조회 요청 스레드가 그대로 뚫린다</text>
 </svg>
 
-이때 노드 4의 depth를 기존 코드가 정하는 과정:
-
-```java
-depthMap.put(node, depth);   // ← 검사 없이 put = 재방문마다 덮어씀
-```
-
-- 2 경유로 오면 depth 2, 3 경유로 다시 오면 **또 덮어써서** 마지막 방문이 승
-- 방문 순서 = tree 리스트 순서 = **ORDER BY 없는 행 순서** (틈 2와 결합)
-- 한편 `parent_id` 는 parentMap의 "마지막 **행** 승" — <b>서로 다른 복권 두 장</b>이라 어긋난 조합이 서버로 갈 수 있다 (실측: parent depth 0 + 자식 depth 4)
+<Warn>무한루프(CPU 100%로 계속 도는 것)와도 다르다 — <b>수만 스텝 만에 확정적으로 터진다.</b>
+증상은 "plan 버튼을 눌렀는데 응답이 없다" + 로그에 StackOverflowError.</Warn>
 </Slide>
 
-<Slide kick="케이스 ④">
-## 중복 간선 — 죽진 않지만 곱으로 일한다
+<Slide kick="최소형">
+## 자기참조 — 같은 원리의 한 줄짜리 버전
 
-<Lead>rank 2·3 행이 tree에 들어가면 같은 자식이 리스트에 n번 — DFS가 그 서브트리를 **n번 통째로 재순회**한다.</Lead>
+<Lead>고리에 노드가 두 개일 필요도 없다. **자기 자신이 자기 자식**인 행 하나면 충분하다.</Lead>
 
 ```java
+// STREAM 행: source=2, target=2  →  tree: 2 → [2]
+
+calcDepth(2, 1)
+ └ calcDepth(2, 2)     // 2의 자식 = 2 자신
+    └ calcDepth(2, 3)  // 또 자신
+       └ …             // 다른 노드를 거칠 필요조차 없이 즉시 무한
+```
+
+- 순환 간선의 **최소형** — 원리는 동일, 속도는 더 빠르게 터진다
+- 그래서 가드도 동일하게 먹힌다: "왔던 노드 재진입"이라는 공통 패턴 하나만 끊으면 둘 다 해결
+</Slide>
+
+<Slide kick="유입 경로">
+## 이런 데이터가 실제로 올 수 있나
+
+<Lead>정상 실행계획은 데이터가 스캔→RETURN 방향으로만 흐르는 **DAG라 고리가 없어야 한다.** 그런데 에이전트가 읽는 건 계획 그 자체가 아니라 **공유 staging 테이블의 행들**이다.</Lead>
+
+| 경로 | 어떻게 고리가 되나 | 확도 |
+|---|---|---|
+| 재귀 SQL (`WITH ... UNION ALL`) | temp table이 자기 출력을 자기 입력으로 되먹임 — 되돌아가는 참조가 생길 수 있는 유일한 "정상 SQL" | <W>후보 (실측 전)</W> |
+| 동시 EXPLAIN 행 섞임 | 같은 EXPLAIN_STREAM 에 두 plan이 함께 써지고 5-key가 겹치면, 별개 트리 둘이 한 트리로 합쳐지며 우연히 고리 형성 | <W>저확률</W> |
+| 손상·부분 적재·수동 조작 | 쓰다 만 행, 다른 툴의 간섭 | <W>저확률</W> |
+
+<Note>확률은 낮다. 문제는 <b>확률 × 대가</b>다 — 걸리면 예외 한 건이 아니라 스레드 관통.
+게다가 SavingPlan이 되면 조회가 <b>주기 수집</b>으로 바뀌어 시도 횟수가 하루 수천 번 — "저확률"이 "언젠가 반드시"로 바뀐다.</Note>
+</Slide>
+
+<Slide kick="나머지 케이스 ①">
+## 중복 간선 — 안 터지고 곱으로 일한다
+
+<Lead>rank=1 필터는 화면용 `targetMap` 에만 걸린다. `tree` 에는 rank 2·3 행도 들어가서 같은 자식이 목록에 n번 실린다.</Lead>
+
+```java
+ctx.tree.computeIfAbsent(targetId, k -> new ArrayList<>()).add(sourceId);  // rank 검사 없음
+...
 for (Integer child : tree.get(node)) {   // [3, 3, 3] 이면
-    if (child != -1) {
-        calcDepth(tree, child, ...);     // 3의 서브트리를 3번 전부 다시 계산
-    }
+    calcDepth(tree, child, ...);         // 3의 서브트리를 통째로 3번 재계산
 }
 ```
 
-- 층마다 중복이 있으면 **곱으로 불어난다**: 층마다 2번씩 × 20층 = 2²⁰ ≈ 백만 번 순회
-- 결과(depth)는 같은 값을 다시 쓰니 안 틀린다 — <b>증상이 "가끔 plan 조회가 느림"으로만 보여서 원인 추적이 가장 어려운 유형</b>
+- 고리가 아니라 **잎은 있으니** 터지진 않는다 — 대신 층마다 중복이면 **곱으로** 불어난다 (2번씩 × 20층 ≈ 백만 순회)
+- depth 값은 같은 걸 다시 쓰니 안 틀림 → 증상이 "가끔 plan 조회가 느림"뿐이라 추적이 가장 어려운 유형
 </Slide>
 
-<Slide kick="케이스 ③" err>
-## 순환·자기참조 — 종료 조건이 사라진다
+<Slide kick="나머지 케이스 ②">
+## 다중 뎁스 — 덮어쓰기가 운에 좌우된다
 
-<Lead>기존 재귀의 종료 조건은 단 하나, **"더 내려갈 자식이 없다"**. 고리 모양 데이터에선 그 조건이 영원히 오지 않는다.</Lead>
+<Lead>공유 서브플랜(한 연산자의 출력을 두 연산자가 소비)이면 한 노드로 가는 길이 두 개가 된다. `depthMap.put` 은 검사 없이 덮어쓰므로 **마지막에 방문한 길**의 depth가 남는다.</Lead>
 
-```java
-calcDepth(tree, child, depth + 1, depthMap);
-// 2→3 → 3→2 → 2→3 → ...  스택 프레임이 끝없이 쌓임 → StackOverflowError
-```
+- 방문 순서 = tree 리스트 순서 = SELECT 행 순서인데, 최종 SELECT 에 **ORDER BY 가 없다** (`SELECT * FROM RankedRows`) → 행 순서 비결정
+- 같은 plan을 두 번 조회해도 depth가 달라질 수 있고, 별개 규칙(마지막 행 승)으로 정해지는 `parent_id` 와 어긋난 조합이 서버로 갈 수 있다
 
-이런 모양의 데이터가 실제로 올 수 있는 경로 3가지:
-
-| 경로 | 설명 | 확도 |
-|---|---|---|
-| 재귀 SQL (`WITH ... UNION ALL`) | temp table이 자기 출력을 자기 입력으로 되먹임 — 되돌아가는 참조가 그래프에 생길 수 있는 유일한 "정상 SQL" | <W>후보 (실측 전)</W> |
-| 동시 EXPLAIN 행 섞임 | 같은 staging 테이블에 두 plan이 동시에 써지고 5-key가 겹치면 두 트리가 한 트리로 합쳐지며 우연히 고리 형성 | <W>저확률</W> |
-| 손상·부분 적재 | 쓰다 만 행, 수동 조작, 툴 간섭 | <W>저확률</W> |
-
-<Warn>확률은 낮다. 문제는 <b>대가</b>다 — 걸리는 순간 예외 한 건이 아니라 <b>StackOverflowError</b>. Error 는 일반 catch(Exception)에 안 잡혀서 요청 스레드가 그대로 뚫린다. "저확률 × 치명적" 조합이라 가드가 필요한 것.</Warn>
+<Muted>이 케이스의 상세 도식과 해법은 "calcDepth — tree DFS vs parentMap" 덱 참조</Muted>
 </Slide>
 
-<Slide kick="케이스 ①" err>
-## 고아 노드 — 진짜 피해는 조용한 행 밀림
+<Slide kick="나머지 케이스 ③" err>
+## 고아 노드 — 조용한 행 밀림
 
-<Lead>calcDepth는 **노드 1에서만 출발**한다. 1에서 안 닿는 행(다른 plan의 잔여물·부분 적재)은 영영 방문되지 않는다.</Lead>
+<Lead>calcDepth는 루트 1에서만 출발한다. 1에서 안 닿는 행(다른 plan 잔여물·부분 적재)은 영영 방문되지 않아 depth가 없다.</Lead>
 
 ```java
-calcDepth(ctx.tree, 1, 0, ctx.depthMap);      // 출발점은 1 하나뿐
-...
 Integer dep = ctx.depthMap.get(pi.id);
-if (dep != null) L.depth.add(dep);            // ← 없으면 조용히 건너뜀
-L.id.add(pi.id);                              //    id 는 무조건 추가
-L.parent_id.add(pi.parent_id);                //    parent_id 도 무조건 추가
+if (dep != null) L.depth.add(dep);   // depth 만 조용히 빠짐
+L.id.add(pi.id);                     // id·parent_id 는 무조건 추가
 ```
 
-- **4~5행** depth만 빠지고 id·parent_id는 들어감 → **리스트 길이가 어긋난다**
-
-<svg className="dg" viewBox="0 0 720 190" xmlns="http://www.w3.org/2000/svg">
+<svg className="dg" viewBox="0 0 720 130" xmlns="http://www.w3.org/2000/svg">
   <text x="60" y="35" className="dg-t">id</text>
   <rect x="150" y="18" width="70" height="26" rx="6" className="dg-box"/><text x="185" y="36" textAnchor="middle" className="dg-mono">4</text>
-  <rect x="230" y="18" width="70" height="26" rx="6" className="dg-box bad"/><text x="265" y="36" textAnchor="middle" className="dg-mono">8 (고아)</text>
-  <rect x="310" y="18" width="70" height="26" rx="6" className="dg-box"/><text x="345" y="36" textAnchor="middle" className="dg-mono">5</text>
-  <text x="60" y="90" className="dg-t">depth</text>
-  <rect x="150" y="73" width="70" height="26" rx="6" className="dg-box"/><text x="185" y="91" textAnchor="middle" className="dg-mono">2</text>
-  <rect x="230" y="73" width="70" height="26" rx="6" className="dg-box"/><text x="265" y="91" textAnchor="middle" className="dg-mono">2 ← 5의 것!</text>
-  <path d="M310 86 L330 86" className="dg-line"/>
-  <text x="345" y="91" className="dg-tm">한 칸씩 밀림…</text>
-  <text x="150" y="150" className="dg-badf" style={{fontFamily:'var(--sans)',fontSize:'14px',fontWeight:600}}>서버는 i번째 id에 i번째 depth를 짝지음 — 고아 이후 모든 노드의 들여쓰기가 틀어진다</text>
+  <rect x="230" y="18" width="90" height="26" rx="6" className="dg-box bad"/><text x="275" y="36" textAnchor="middle" className="dg-mono">8 (고아)</text>
+  <rect x="330" y="18" width="70" height="26" rx="6" className="dg-box"/><text x="365" y="36" textAnchor="middle" className="dg-mono">5</text>
+  <text x="60" y="95" className="dg-t">depth</text>
+  <rect x="150" y="78" width="70" height="26" rx="6" className="dg-box"/><text x="185" y="96" textAnchor="middle" className="dg-mono">2</text>
+  <rect x="230" y="78" width="90" height="26" rx="6" className="dg-box"/><text x="275" y="96" textAnchor="middle" className="dg-mono">2 ← 5의 것!</text>
+  <text x="345" y="96" className="dg-tm">한 칸씩 밀림 — 예외도 로그도 없음</text>
 </svg>
 
-<Note>예외도 로그도 없이 <b>화면만 슬쩍 이상해지는</b> 최악의 실패 모드. (TagCountPack "1 row = 1 pack" 규칙이 중요한 것과 같은 이유 — 평행 리스트는 길이가 곧 정합성이다)</Note>
-</Slide>
-
-<Slide kick="종합">
-## 왜 지금까지 안 터졌나
-
-- 대부분의 plan은 **진짜 트리**다 — 가정 ①~④가 우연히 다 성립
-- plan 조회가 **on-demand 저빈도**라 저확률 데이터를 만날 기회 자체가 적었다
-- 다중 뎁스가 있어도 **행 순서가 우연히 일관**되면 티가 안 난다
-
-<Warn>그런데 지금 만들려는 <b>SavingPlan은 주기 수집</b>이다. 시도 횟수가 하루 수천 번으로 늘면
-"저확률"은 "언젠가 반드시"가 된다 — 엣지케이스 정리를 SavingPlan 구현 <b>전에</b> 하는 이유.</Warn>
+- 서버는 i번째 id에 i번째 depth를 짝지으니, 고아 **이후 모든 노드**의 들여쓰기가 틀어진다
+- 터지는 것(순환)보다 발견이 늦다 — **화면만 슬쩍 이상해지는** 실패 모드
 </Slide>
 
 <Slide kick="정리">
-## 한 장 요약 — 가정 · 원인 · 증상
+## 한 장 요약
 
-| 깨진 가정 | 그런 데이터가 오는 이유 | 기존 코드의 증상 |
+| 케이스 | 왜 발생하나 | 기존 코드의 운명 |
 |---|---|---|
-| ② 경로 유일 | DAG(공유 서브플랜) + ORDER BY 없는 행 순서 | depth가 조회마다 달라질 수 있음, parent_id와 어긋남 |
-| ④ 간선 유일 | rank 2·3 행이 tree에 들어옴 (반쪽 필터) | 같은 서브트리 곱절 재계산 — 간헐적 느려짐 |
-| ③ 고리 없음 | 재귀 SQL 되먹임(후보)·행 섞임·손상 | <B>StackOverflowError</B> — 스레드 관통 |
-| ① 전부 연결 | 남의 plan 잔여 행·부분 적재 | depth 리스트만 짧아져 <B>조용한 행 밀림</B> |
+| **순환·자기참조** | 유일한 종료 조건("잎 도달")이 고리 데이터엔 존재하지 않음 + 재방문 검사 부재 | <B>StackOverflowError</B> — catch(Exception) 관통 |
+| 중복 간선 | rank 필터가 tree엔 미적용 → 같은 자식 n번 | 곱절 재계산 — 간헐적 느려짐 |
+| 다중 뎁스 | put 덮어쓰기 + ORDER BY 없는 행 순서 | depth가 운에 좌우, parent_id와 어긋남 |
+| 고아 노드 | 루트 1에서만 출발 → 끊긴 행은 미방문 | depth 리스트만 짧아져 조용한 행 밀림 |
 
-<Note>공통 구조: <b>검증 없는 가정 + 공유 테이블 + 비결정 정렬</b>. 개별 케이스를 때려잡는 것보다
-가정 자체를 줄이는 방향(예: depth를 parent_id와 같은 소스에서 유도)이 근본 해법인 이유다.</Note>
-<Muted>재현 코드: scratchpad CalcDepthTest.java / ParentMapDepthTest.java · 코드 라인: Db2Helper.java collectRow(:422) · calcDepth(:121) · populatePlanLists(:442)</Muted>
+<Note>넷의 공통 뿌리: <b>"데이터는 완벽한 트리"라는 검증 없는 가정</b> + 공유 staging 테이블 + 비결정 정렬.
+무한재귀만은 가드 한 줄로 끊기지만, 나머지까지 근본적으로 없애려면 가정 자체를 줄여야 한다(→ parentMap 방식).</Note>
+<Muted>재현: scratchpad CalcDepthTest.java (순환 시나리오에서 StackOverflowError 실측) · 코드: Db2Helper.java calcDepth(:121) · collectRow(:422) · populatePlanLists(:442)</Muted>
 </Slide>

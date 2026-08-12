@@ -127,8 +127,8 @@ export const DOCS: readonly Doc[] = [
     load: () => import('./content/react/fsd-architecture.mdx') },
 
   { cat: 'db2', slug: 'calcdepth-edge-cases', session: 'work', at: '2026-08-12',
-    t: 'calcDepth 엣지케이스는 왜 생기나',
-    d: '가정 4개 × 데이터 파이프라인의 틈 3개 — 순환/중복/다중뎁스/고아가 흘러드는 경로와 무너지는 라인',
+    t: 'calcDepth는 왜 무한재귀에 빠지나',
+    d: '순환 데이터에서 굴러떨어지는 과정 스텝 추적 — 종료 조건 부재, 스택 폭발, 유입 경로',
     k: 'calcdepth 엣지케이스 원인 order by 없음 rank 필터 collectrow dag 공유 서브플랜 순환 자기참조 고아 행 밀림 stackoverflow explain_stream 5-key',
     load: () => import('./content/db2/calcdepth-edge-cases.mdx') },
 
