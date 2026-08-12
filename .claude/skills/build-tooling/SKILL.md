@@ -17,9 +17,23 @@ description: Vite·webpack·babel·npm 등 빌드 설정을 바꿀 때 사용. �
 
 ```bash
 npm run typecheck
+npm run test                        # 양쪽 MDX 설정 일치 검사 포함
 npx vite build --logLevel warn      # dev 파이프라인
 npx webpack --mode production       # prod 파이프라인
 ```
+
+## ⚠️ MDX 옵션은 빠져도 빌드가 성공한다
+
+dev 는 `@mdx-js/rollup`, prod 는 `@mdx-js/loader` 로 **서로 다른 플러그인**을 쓴다.
+아래 두 옵션은 양쪽에서 동일해야 하는데, 빠뜨려도 **컴파일은 통과하고 결과물만 틀린다** —
+사람이 화면을 볼 때까지 아무도 모른다.
+
+- `providerImportSource: '@mdx-js/react'` — 없으면 `MDXProvider` 의 slide-kit 매핑이 통째로 무시된다
+- `remarkPlugins: [remarkGfm]` — 없으면 마크다운 표가 파이프 문자 그대로 렌더된다
+  (실제로 덱 10개가 이 상태로 방치된 적이 있다)
+
+`src/entities/docs/mdx-pipeline.test.ts` 가 양쪽 설정 일치를 감시한다.
+MDX 옵션을 건드렸으면 `npm run test` 를 반드시 돌린다.
 
 ## 변경 유형별 체크리스트
 

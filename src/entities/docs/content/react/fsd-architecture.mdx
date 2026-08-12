@@ -119,8 +119,6 @@ B가 다시 A를 부르는 순환도 아무 경고 없이 만들어진다.
 
 가장 자주 헷갈리는 층이다. 기준은 하나다 — **동사로 이름이 나오는가.**
 
-<div className="tscroll">
-
 | 후보 | 이름이 이렇게 나온다 | 판정 |
 |---|---|---|
 | 검색창 | "검색<G>한다</G>" | <G>features/search/</G> |
@@ -129,8 +127,6 @@ B가 다시 A를 부르는 순환도 아무 경고 없이 만들어진다.
 | 문서 목록 데이터 | "문서<B>다</B>" — 명사 | <B>entities/docs/</B> |
 | 버튼 스타일 | 행동이 아님 | <B>shared/ui/</B> |
 | 덱 뷰어 | 행동이 아니라 화면 덩어리 | <B>widgets/</B> |
-
-</div>
 
 <Warn>**명사면 feature 가 아니다.** `features/user/` `features/docs/` 처럼 도메인 이름이 붙으면
 그건 entity 다. feature 는 그 데이터로 사용자가 **무엇을 하는지**를 담는다.</Warn>
@@ -231,8 +227,6 @@ src/features/
     api/  components/  hooks/  stores/  types/  index.ts
 ```
 
-<div className="tscroll">
-
 | | Bulletproof React | FSD |
 |---|---|---|
 | 자르는 단위 | 기능(feature) 하나 | **층 × 슬라이스** 2차원 |
@@ -240,8 +234,6 @@ src/features/
 | 도메인 데이터 위치 | 각 feature 안 | <span className="fsd-pick">entities 로 분리</span> |
 | 기능 간 참조 | 관례로 금지, 강제는 없음 | 같은 층 참조 금지 |
 | 학습 비용 | 낮음 | <B>높음</B> |
-
-</div>
 
 핵심 차이는 **entities 의 유무**다. 여러 기능이 같은 데이터를 쓸 때
 Bulletproof 는 그 데이터가 어느 feature 소유인지 애매해지는데, FSD 는 아래층으로 내려 해결한다.
@@ -252,16 +244,12 @@ Bulletproof 는 그 데이터가 어느 feature 소유인지 애매해지는데,
 <Slide kick="비교 ②">
 ## Atomic Design · Clean Architecture
 
-<div className="tscroll">
-
 | 아키텍처 | 나누는 축 | FSD 와의 관계 |
 |---|---|---|
 | **Atomic Design** | UI 크기 (atom→organism) | **직교한다.** 도메인 로직 배치엔 답을 안 준다. FSD 의 `shared/ui` 안에서 병행 가능 |
 | **Clean / Hexagonal** | 도메인 ↔ 인프라 (안쪽이 바깥을 모름) | 발상이 같다. FSD 는 그걸 **프론트 폴더 규칙으로 단순화**한 판본 |
 | **MVC / MVVM** | 표현 ↔ 로직 ↔ 데이터 | 층이 3개뿐. 기능이 늘면 각 층이 비대해짐 |
 | **모듈 없음(타입별)** | 파일 종류 | 소규모에선 가장 빠름. 지우기가 어려워지는 게 한계 |
-
-</div>
 
 <Note>Atomic Design 은 **경쟁 관계가 아니다.** "버튼은 atom" 같은 UI 분류는
 `shared/ui/` 내부 정리에 그대로 쓸 수 있다. 층 규칙과 충돌하지 않는다.</Note>
@@ -302,8 +290,6 @@ Bulletproof 는 그 데이터가 어느 feature 소유인지 애매해지는데,
 
 **성장 순서를 미리 정해 두면 매번 고민하지 않아도 된다.**
 
-<div className="tscroll">
-
 | 시점 | 할 일 |
 |---|---|
 | 지금 | 6층 유지. `shared/lib` `shared/config` 는 **실제로 쓸 때** 만든다 |
@@ -312,16 +298,12 @@ Bulletproof 는 그 데이터가 어느 feature 소유인지 애매해지는데,
 | 위반이 반복되면 | grep 대신 `eslint-plugin-boundaries` 로 강제 |
 | 페이지가 5개를 넘으면 | `widgets` 층을 본격적으로 쓴다 (지금은 DeckViewer 하나뿐) |
 
-</div>
-
 <Note>**하지 말 것:** 새 층을 만드는 것. 6층 안에서 해결한다.
 층을 추가하는 순간 "어느 층인가" 판단 비용이 급증한다.</Note>
 </Slide>
 
 <Slide kick="정리">
 ## 한 장 요약
-
-<div className="tscroll">
 
 | 질문 | 답 |
 |---|---|
@@ -331,8 +313,6 @@ Bulletproof 는 그 데이터가 어느 feature 소유인지 애매해지는데,
 | 두 feature 가 서로 필요하면 | 경계를 잘못 그은 것 — 합치거나 아래로 내린다 |
 | 잘 잡혔는지 어떻게 아나 | **"이 폴더 하나만 지우면 기능이 사라지는가"** |
 | 언제 안 쓰나 | 규모가 작고 변화가 적을 때 |
-
-</div>
 
 <Warn>층 규칙은 빌드가 잡아주지 않는다. 구조를 바꾼 뒤에는 위반 탐지 grep 을 **직접** 돌릴 것.</Warn>
 </Slide>

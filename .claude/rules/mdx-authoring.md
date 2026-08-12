@@ -43,6 +43,18 @@
 | `<div class="flow">` 박스+화살표 | `<Flow steps={[{t:'제목',d:'설명'},{t:'…',d:'…',accent:true},{t:'…',bad:true}]} />` (세로형은 `col` prop) |
 | 인라인 SVG (`class="dg …"`) | JSX 로 그대로: `class→className`, `stroke-width→strokeWidth` 등 camelCase 변환. 내용·좌표 무변경 |
 
+## ⚠️ 마크다운 표는 remark-gfm 에 의존한다
+
+**MDX 는 기본적으로 GFM 을 파싱하지 않는다.** 표·취소선·자동링크는 `remark-gfm` 이 있어야 한다.
+빠지면 컴파일은 성공하고 **파이프 문자가 그대로 화면에 렌더된다** — 빌드도 타입 검사도
+통과하므로 사람이 화면을 볼 때까지 아무도 모른다. 실제로 덱 10개가 이 상태로 방치됐다.
+
+설정은 `vite.config.js`(@mdx-js/rollup)와 `webpack.config.js`(@mdx-js/loader) **양쪽**에 있어야 한다.
+한쪽만 넣으면 dev 는 멀쩡한데 배포가 깨진다. `src/entities/docs/mdx-pipeline.test.ts` 가 이를 감시한다.
+
+표를 `<div className="tscroll">` 로 감싸지 않는다 — `mdxComponents.table` 이 이미 감싼다.
+직접 쓴 JSX `<table>` 은 컴포넌트 매핑을 타지 않으므로 그때만 수동으로 감싼다.
+
 ## MDX 문법 함정 (중요)
 - 본문 텍스트의 `{` `}` → `\{` `\}` 로 이스케이프 (코드 펜스 안은 그대로 OK)
 - 본문 텍스트의 `<` 가 태그가 아니면 → `&lt;` 또는 백틱 코드로 감싸기

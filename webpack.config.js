@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
+import remarkGfm from 'remark-gfm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const babel = {
@@ -28,8 +29,13 @@ export default {
     rules: [
       { test: /\.[jt]sx?$/, exclude: /node_modules/, use: babel },
       {
+        // ⚠️ remark-gfm 이 빠지면 마크다운 표가 파이프 문자 그대로 렌더된다.
+        // vite.config.js(@mdx-js/rollup) 쪽과 반드시 같은 플러그인 목록을 유지할 것.
         test: /\.mdx$/,
-        use: [babel, { loader: '@mdx-js/loader', options: { providerImportSource: '@mdx-js/react' } }],
+        use: [babel, {
+          loader: '@mdx-js/loader',
+          options: { remarkPlugins: [remarkGfm], providerImportSource: '@mdx-js/react' },
+        }],
       },
       { test: /\.css$/, use: ['style-loader', 'css-loader'] },
     ],
