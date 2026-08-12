@@ -126,6 +126,12 @@ export const DOCS: readonly Doc[] = [
     k: 'fsd feature sliced design 아키텍처 구조 층 레이어 layer slice 의존 방향 import features entities widgets shared 판단 기준 atomic design clean architecture hexagonal bulletproof react mvc 폴더 구조 단점 순환 참조',
     load: () => import('./content/react/fsd-architecture.mdx') },
 
+  { cat: 'db2', slug: 'plan-data-journey', session: 'work', at: '2026-08-12',
+    t: 'plan 데이터 여행 — 수집에서 depth까지',
+    d: '실측 5행이 tree/parentMap/targetMap에 쌓이고 평행 배열이 되기까지, 행 단위 추적',
+    k: 'plan 데이터 흐름 collectrow tree parentmap targetmap depthmap 평행 배열 listvalue populateplanlists 실측 ixscan 추적',
+    load: () => import('./content/db2/plan-data-journey.mdx') },
+
   { cat: 'db2', slug: 'calcdepth-edge-cases', session: 'work', at: '2026-08-12',
     t: 'calcDepth는 왜 무한재귀에 빠지나',
     d: '순환 데이터에서 굴러떨어지는 과정 스텝 추적 — 종료 조건 부재, 스택 폭발, 유입 경로',

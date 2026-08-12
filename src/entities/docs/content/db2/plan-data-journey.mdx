@@ -1,0 +1,230 @@
+<Slide kick="DBX · 코드 추적">
+<h1>plan 데이터 여행<br/>수집에서 depth까지</h1>
+<Lead>4.77에서 직접 검증한 **실측 STREAM 5행**이 에이전트 안에서
+어떤 Map에 어떤 모양으로 쌓이고, 어떤 코드가 꺼내서 depth가 되는지 — 행 하나 단위로 따라간다.</Lead>
+<Muted>입력 데이터: TESTDB syscat 조인 EXPLAIN 실측 (2026-08-12) · 코드: Db2Helper.java</Muted>
+</Slide>
+
+<Slide kick="입력">
+## 출발점 — 실측된 수집 쿼리 결과 5행
+
+<Lead>DataGrip에서 직접 확인한 그 데이터다. 에이전트에겐 이 그리드가 **세상의 전부**다.</Lead>
+
+| # | source_type | source_id | target_id | object_name | rank |
+|---|---|---|---|---|---|
+| 1 | D (데이터 객체) | **-1** | 3 | INDCOLUMNS01 | 1 |
+| 2 | O (연산자) | 3 | 2 | — | 1 |
+| 3 | D (데이터 객체) | **-1** | 4 | INDTABLES01 | 1 |
+| 4 | O (연산자) | 4 | 2 | — | 2 |
+| 5 | O (연산자) | 2 | 1 | — | 1 |
+
+- 한 행 = 간선 하나: "source가 만든 데이터를 target이 받는다"
+- 행 2·4가 둘 다 target=2 → **조인 노드** (그래서 rank가 1, 2로 갈림)
+- 행 4의 rank=2는 비용 순위일 뿐 — 실제 연산자 타입·rank 배정은 ④⑤ 쿼리로 확인한 값 기준 (이 덱에선 조인=JOIN, 3·4=IXSCAN으로 표기)
+</Slide>
+
+<Slide kick="등장인물">
+## Map 4개 — PlanContext의 살림살이
+
+```java
+private static class PlanContext {
+    final Map<Integer, Integer>        depthMap  = new HashMap<>();
+    final Map<Integer, Integer>        parentMap = new HashMap<>();
+    final Map<Integer, List<Integer>>  tree      = new HashMap<>();
+    final Map<Integer, List<PlanInfo>> targetMap = new HashMap<>();
+}
+```
+
+| Map | 키 → 값 | 역할 | 채우는 곳 |
+|---|---|---|---|
+| `tree` | 부모 → **자식 배열** | calcDepth가 내려갈 길 | collectRow |
+| `parentMap` | 자식 → 부모 (하나) | 출력 행의 parent_id | collectRow |
+| `targetMap` | 노드 → **PlanInfo 배열** | 화면에 그릴 노드 정보 | collectRow (rank=1만) |
+| `depthMap` | 노드 → depth | 계산 결과 | calcDepth |
+
+<Note>호출마다 <code>new PlanContext()</code> — 요청 두 개가 동시에 와도 살림이 안 섞인다 (스레드 안전).
+이제 5행이 위 3개 Map을 어떻게 채우는지 본다.</Note>
+</Slide>
+
+<Slide kick="적재 코드">
+## collectRow — 행 하나가 Map 3개에 갈라져 들어간다
+
+```java
+private static void collectRow(ResultSet rs, PlanContext ctx) throws Exception {
+    int targetId = rs.getInt("target_id");
+    int sourceId = rs.getInt("source_id");
+    int rank     = rs.getInt("rank");
+    ctx.tree.computeIfAbsent(targetId, k -> new ArrayList<>()).add(sourceId);
+    if (targetId == 1) ctx.parentMap.put(1, -1);
+    ctx.parentMap.put(sourceId, targetId);
+    if (rank == 1) {
+        ctx.targetMap.computeIfAbsent(targetId, k -> new ArrayList<>())
+                .add(new PlanInfo(sourceId, targetId, operator_type, ...));
+    }
+}
+```
+
+- **5행** `tree` — target의 자식 배열에 source를 **무조건** 추가 (rank 안 봄)
+- **6행** target이 1(RETURN)이면 루트 등록: `parentMap[1] = -1`
+- **7행** `parentMap` — source의 부모는 target. `put`이라 같은 source가 또 오면 **덮어씀**
+- **8~10행** `targetMap` — **rank=1일 때만** target 칸의 배열에 PlanInfo 추가 (연산자 타입·비용·객체명)
+</Slide>
+
+<Slide kick="추적 ①">
+## 행 1~2 적재 — Map이 자라는 모습
+
+**행 1** `(source=-1, target=3, INDCOLUMNS01, rank=1)` 처리 후:
+
+```java
+tree      = { 3: [-1] }                       // 3의 자식 배열에 -1
+parentMap = { -1: 3 }                         // "-1의 부모는 3" ← -1도 들어간다!
+targetMap = { 3: [PlanInfo(id=-1→3, IXSCAN, INDCOLUMNS01)] }
+```
+
+**행 2** `(source=3, target=2, rank=1)` 처리 후:
+
+```java
+tree      = { 3: [-1],  2: [3] }
+parentMap = { -1: 3,  3: 2 }                  // 3의 부모는 2
+targetMap = { 3: [...],  2: [PlanInfo(3→2, JOIN)] }
+```
+
+<Note><code>-1</code>(인덱스 객체)이 parentMap에 들어가는 게 눈에 띄는데 — 뒤에서 보듯 출력 단계에서 자연스럽게 걸러진다. tree의 <code>-1</code>은 calcDepth의 <code>child != -1</code>이 거른다.</Note>
+</Slide>
+
+<Slide kick="추적 ②">
+## 행 3~5 적재 — 완성된 세 Map
+
+**행 3** `(-1→4, INDTABLES01)`: `parentMap[-1] = 4` ← **3이었는데 4로 덮어씀** (put의 마지막 승)
+
+**행 4** `(4→2, rank=2)`: tree엔 들어가고, **targetMap엔 안 들어감** (rank≠1)
+
+**행 5** `(2→1, rank=1)`: target이 1이라 **루트 등록** 발동
+
+최종 상태:
+
+```java
+tree      = { 1: [2],  2: [3, 4],  3: [-1],  4: [-1] }
+             // 2의 자식 배열 [3,4] — rank 무관하게 둘 다
+
+parentMap = { 1: -1,  2: 1,  3: 2,  4: 2,  -1: 4 }
+             // 노드마다 부모 하나. -1은 마지막 행이 이긴 잔재
+
+targetMap = { 1: [PlanInfo(RETURN)],  2: [PlanInfo(JOIN)],
+              3: [PlanInfo(IXSCAN, INDCOLUMNS01)],
+              4: [PlanInfo(IXSCAN, INDTABLES01)] }
+             // 4로 가는 간선(rank2) 정보는 없지만, 4 자신은 행 3(rank1)으로 등록됨
+```
+
+<svg className="dg" viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="360" cy="35" r="20" className="dg-node"/><text x="360" y="41" className="dg-nt">1</text>
+  <text x="395" y="40" className="dg-tm">RETURN</text>
+  <path d="M360 55 L360 85" className="dg-line"/>
+  <circle cx="360" cy="105" r="20" className="dg-node"/><text x="360" y="111" className="dg-nt">2</text>
+  <text x="395" y="110" className="dg-tm">JOIN</text>
+  <path d="M345 120 L255 155" className="dg-line"/>
+  <path d="M375 120 L465 155" className="dg-line"/>
+  <circle cx="245" cy="172" r="20" className="dg-node leaf"/><text x="245" y="178" className="dg-nt">3</text>
+  <text x="130" y="177" className="dg-tm">IXSCAN·INDCOLUMNS01</text>
+  <circle cx="475" cy="172" r="20" className="dg-node leaf"/><text x="475" y="178" className="dg-nt">4</text>
+  <text x="510" y="177" className="dg-tm">IXSCAN·INDTABLES01</text>
+</svg>
+</Slide>
+
+<Slide kick="계산">
+## calcDepth — tree를 타고 내려가며 depthMap 채우기
+
+```java
+calcDepth(ctx.tree, 1, 0, ctx.depthMap);   // 루트 1, depth 0 에서 시작
+```
+
+| 스텝 | 호출 | 하는 일 | depthMap |
+|---|---|---|---|
+| 1 | calcDepth(**1**, 0) | put(1,0) → tree[1]=[2] 로 하강 | \{1=0\} |
+| 2 | └ calcDepth(**2**, 1) | put(2,1) → tree[2]=**[3, 4]** 순회 | \{1=0, 2=1\} |
+| 3 | &nbsp;&nbsp;└ calcDepth(**3**, 2) | put(3,2) → tree[3]=[-1], **-1 건너뜀** | \{1=0, 2=1, 3=2\} |
+| 4 | &nbsp;&nbsp;└ calcDepth(**4**, 2) | put(4,2) → tree[4]=[-1], 건너뜀 | \{1=0, 2=1, 3=2, 4=2\} |
+
+- 자식 배열 `[3, 4]` 를 **앞에서부터** 순회 — 이 배열 순서가 곧 SELECT 행 순서였다는 게 앞 덱의 논점
+- `-1` 은 인덱스 객체라 내려가지 않음 (`if (child != -1)`)
+- 이 plan은 진짜 트리라 깔끔하게 끝 — 4스텝 만에 depthMap 완성
+</Slide>
+
+<Slide kick="출력 ①">
+## populatePlanLists — parentMap을 돌며 꺼낸다
+
+```java
+for (Map.Entry<Integer, Integer> entry : ctx.parentMap.entrySet()) {
+    int sourceId = entry.getKey();                    // 노드
+    int targetId = entry.getValue();                  // 그 부모
+    if (!ctx.targetMap.containsKey(sourceId)) continue;  // 화면용 정보 없으면 skip
+    List<PlanInfo> planList = ctx.targetMap.get(sourceId);
+    for (PlanInfo pi : planList) {
+        pi.setId(sourceId);
+        pi.setParentId(targetId);
+        if (targetId == -1) { pi.setId(1); pi.setParentId(-1); }   // 루트 보정
+        Integer dep = ctx.depthMap.get(pi.id);
+        ...리스트에 추가...
+    }
+}
+```
+
+parentMap 5개 엔트리가 하나씩 처리되는 과정:
+
+| 엔트리 (노드→부모) | targetMap[노드] 있나 | 결과 |
+|---|---|---|
+| **-1** → 4 | 없음 | <W>skip — 인덱스 잔재가 여기서 걸러진다</W> |
+| **3** → 2 | IXSCAN·INDCOLUMNS01 | 출력: id=3, parent=2, depth=**2** |
+| **4** → 2 | IXSCAN·INDTABLES01 | 출력: id=4, parent=2, depth=**2** |
+| **2** → 1 | JOIN | 출력: id=2, parent=1, depth=**1** |
+| **1** → -1 | RETURN | 루트 보정 → id=1, parent=-1, depth=**0** |
+</Slide>
+
+<Slide kick="출력 ②">
+## 최종 산출물 — 평행 배열 (ListValue)
+
+<Lead>서버로 가는 건 객체 목록이 아니라 **같은 길이의 배열 묶음**이다. i번째끼리 짝지어야 한 노드가 된다.</Lead>
+
+```java
+id            = [  3,   4,   2,   1 ]
+parent_id     = [  2,   2,   1,  -1 ]
+depth         = [  2,   2,   1,   0 ]
+operator_type = [ "IXSCAN", "IXSCAN", "JOIN", "RETURN" ]
+object_name   = [ "INDCOLUMNS01", "INDTABLES01", "", "" ]
+total_cost    = [ ..., ..., ..., ... ]
+```
+
+서버/UI는 이 배열을 세로로 읽어 트리를 복원한다:
+
+```java
+depth 0  RETURN                 (id 1)
+depth 1  └─ JOIN                (id 2)
+depth 2     ├─ IXSCAN INDCOLUMNS01  (id 3)
+depth 2     └─ IXSCAN INDTABLES01   (id 4)
+```
+
+- 배열 순서는 `parentMap`(HashMap) 순회 순서라 **위 순서 그대로란 보장은 없다** — 행마다 id·parent·depth가 같이 붙어 있으니 순서 자체는 문제가 안 된다
+- 문제가 되는 건 **길이가 어긋날 때** — depth만 빠지면 i번째 짝이 밀린다 (고아 노드 케이스, 엣지케이스 덱 참조)
+</Slide>
+
+<Slide kick="정리">
+## 전체 여행 한 장
+
+<Flow steps={[
+  { t: 'SELECT 5행', d: '간선 (source→target) + rank' },
+  { t: 'collectRow', d: 'tree / parentMap / targetMap 에 분배' },
+  { t: 'calcDepth', d: 'tree 를 타고 depthMap 채움', accent: true },
+  { t: 'populatePlanLists', d: 'parentMap 순회 + 3개 Map 조합' },
+  { t: '평행 배열', d: 'id/parent/depth/type… 서버 전송', accent: true },
+]} />
+
+| 단계 | 자료구조 | 이 데이터에서의 실제 값 |
+|---|---|---|
+| 적재 | tree | \{1:[2], 2:[3,4], 3:[-1], 4:[-1]\} |
+| 적재 | parentMap | \{1:-1, 2:1, 3:2, 4:2, -1:4\} |
+| 적재 | targetMap | 노드 4개의 PlanInfo (rank=1 행만) |
+| 계산 | depthMap | \{1:0, 2:1, 3:2, 4:2\} |
+| 출력 | ListValue | id[4] · parent[4] · depth[4] · … 평행 배열 |
+
+<Note>rank=1 필터는 <b>targetMap에서만</b>, -1 걸러내기는 <b>calcDepth(tree)와 populate(targetMap 부재)에서 각각</b> — 같은 데이터가 Map마다 다른 규칙으로 다뤄진다는 것이 이 코드를 읽는 열쇠다.</Note>
+</Slide>
