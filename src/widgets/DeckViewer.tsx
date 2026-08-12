@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 interface Props {
@@ -42,18 +42,14 @@ export default function DeckViewer({ backTo, backLabel, children }: Props) {
     return () => document.removeEventListener('keydown', key);
   }, [n]);
 
-  const click = (e: ReactMouseEvent<HTMLDivElement>): void => {
-    const t = e.target as HTMLElement | null;
-    if (t?.closest('a,button,.deck-nav,pre,table')) return;
-    const x = e.clientX / window.innerWidth;
-    if (x > 0.5) setI((v) => Math.min(v + 1, n - 1));
-    else setI((v) => Math.max(v - 1, 0));
-  };
+  // 슬라이드 본문 클릭으로는 넘기지 않는다. 이동 수단은 키보드(←/→/스페이스)와
+  // 하단 deck-nav 버튼뿐. 예전엔 화면 좌우 절반을 클릭해 넘겼는데, 좌상단 뒤로가기
+  // 버튼(46px)을 조금만 빗나가도 이전 슬라이드로 넘어가 버렸다.
 
   return (
     <>
       <Link className="deck-back" to={backTo} aria-label={backLabel} />
-      <div className="deck" ref={ref} onClick={click}>{children}</div>
+      <div className="deck" ref={ref}>{children}</div>
       <div className="deck-nav">
         <button onClick={() => setI((v) => Math.max(v - 1, 0))} aria-label="이전">‹</button>
         <div className="ddots">
