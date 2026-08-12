@@ -54,3 +54,16 @@ box-shadow:0 0 0 4px rgba(229,72,77,.2)}
 .nt-toast p{margin:0;font-size:14px;line-height:1.6;color:var(--muted)}
 .nt-toast .tf{margin-top:18px;font-size:11.5px;color:var(--muted);opacity:.75}
 @media (prefers-reduced-motion:reduce){.nt-panel,.nt-toast{transition:opacity .01s}}
+
+/* 홈 허브 섹션 (DATABASE / LANGUAGE 분리) */
+.hub-section{width:100%;max-width:780px}
+.hub-section + .hub-section{margin-top:34px}
+.hub-label{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+color:var(--muted);font-weight:700;margin:0 0 12px 4px;display:flex;align-items:center;gap:12px}
+.hub-label::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* 로고 파일이 없는 카테고리의 임시 글리프 — icon 지정 시 자동으로 <img> 로 대체됨 */
+.cat-btn .ci-mono{display:inline-flex;align-items:center;justify-content:center;
+width:60px;height:60px;border-radius:16px;font-family:var(--mono);font-size:22px;font-weight:700;
+color:var(--accent);border:1px solid var(--line);background:rgba(255,255,255,.05);
+text-shadow:0 0 12px color-mix(in srgb,var(--accent) 45%,transparent)}

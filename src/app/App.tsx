@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
-import HomePage from '../pages/HomePage.jsx';
-import CategoryPage from '../pages/CategoryPage.jsx';
-import DeckPage from '../pages/DeckPage.jsx';
-import ThemeButton, { applySavedTheme } from '../features/theme/ThemeButton.jsx';
-import NotifyBell from '../features/notify/NotifyBell.jsx';
+import HomePage from '../pages/HomePage';
+import CategoryPage from '../pages/CategoryPage';
+import DeckPage from '../pages/DeckPage';
+import ThemeButton, { applySavedTheme } from '../features/theme/ThemeButton';
+import NotifyBell from '../features/notify/NotifyBell';
 
 export default function App() {
   useEffect(() => { applySavedTheme(); }, []);

@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+interface Props {
+  backTo: string;
+  backLabel?: string;
+  children: ReactNode;
+}
+
 // 기존 deck.js 의 슬라이드 넘김을 React 로 — guide.css 의 .deck 스타일 그대로 사용
-export default function DeckViewer({ backTo, backLabel, children }) {
-  const ref = useRef(null);
+export default function DeckViewer({ backTo, backLabel, children }: Props) {
+  const ref = useRef<HTMLDivElement>(null);
   const [i, setI] = useState(0);
   const [n, setN] = useState(0);
 
   useEffect(() => {
     const el = ref.current;
+    if (!el) return;
     const count = () => setN(el.querySelectorAll('.slide').length);
     count();
     setI(0);
@@ -19,13 +27,14 @@ export default function DeckViewer({ backTo, backLabel, children }) {
   }, [children]);
 
   useEffect(() => {
-    const slides = ref.current.querySelectorAll('.slide');
-    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    const slides = ref.current?.querySelectorAll('.slide');
+    slides?.forEach((s, k) => s.classList.toggle('active', k === i));
   }, [i, n]);
 
   useEffect(() => {
-    const key = (e) => {
-      if (e.target.closest('input,textarea')) return;
+    const key = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input,textarea')) return;
       if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setI((v) => Math.min(v + 1, n - 1)); }
       if (e.key === 'ArrowLeft') setI((v) => Math.max(v - 1, 0));
     };
@@ -33,8 +42,9 @@ export default function DeckViewer({ backTo, backLabel, children }) {
     return () => document.removeEventListener('keydown', key);
   }, [n]);
 
-  const click = (e) => {
-    if (e.target.closest('a,button,.deck-nav,pre,table')) return;
+  const click = (e: ReactMouseEvent<HTMLDivElement>): void => {
+    const t = e.target as HTMLElement | null;
+    if (t?.closest('a,button,.deck-nav,pre,table')) return;
     const x = e.clientX / window.innerWidth;
     if (x > 0.5) setI((v) => Math.min(v + 1, n - 1));
     else setI((v) => Math.max(v - 1, 0));
