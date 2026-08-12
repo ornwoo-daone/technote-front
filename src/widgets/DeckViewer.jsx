@@ -8,9 +8,14 @@ export default function DeckViewer({ backTo, backLabel, children }) {
   const [n, setN] = useState(0);
 
   useEffect(() => {
-    const slides = ref.current.querySelectorAll('.slide');
-    setN(slides.length);
+    const el = ref.current;
+    const count = () => setN(el.querySelectorAll('.slide').length);
+    count();
     setI(0);
+    // lazy MDX 로딩 완료 후 슬라이드 수 재계수
+    const mo = new MutationObserver(count);
+    mo.observe(el, { childList: true, subtree: true });
+    return () => mo.disconnect();
   }, [children]);
 
   useEffect(() => {

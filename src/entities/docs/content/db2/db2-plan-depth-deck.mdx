@@ -1,0 +1,556 @@
+import './db2-plan-depth-deck.css';
+
+<section className="slide dd" data-title="표지">
+<div className="eyebrow">DB2 CACHED PLAN</div>
+<h1>실행계획 <span className="hl">depth</span>는<br/>어떻게 계산될까?</h1>
+<p className="lead">executable_id 하나가 → 트리 → 들여쓰기 숫자로<br/>바뀌어 서버로 가는 과정을, 예제 데이터로 한 단계씩.</p>
+<div className="hint">→ 방향키 · 클릭 · 스페이스로 넘기기</div>
+</section>
+
+<section className="slide dd" data-title="큰 그림">
+<div className="kicker">큰 그림</div>
+<h2>4단계 파이프라인</h2>
+<div className="pipe">
+  <div className="pnode"><b>executable_id</b><span>캐시 plan 주소 (hex)</span></div>
+  <div className="pconn">→</div>
+  <div className="pnode"><b>원본 행들</b><span>누가 누구에게 데이터를 주나</span></div>
+  <div className="pconn">→</div>
+  <div className="pnode"><b>트리</b><span>화살표를 이어 나무로</span></div>
+  <div className="pconn">→</div>
+  <div className="pnode acc"><b>depth</b><span>위에서 몇 칸 내려왔나</span></div>
+</div>
+<p className="foot">이 덱은 가운데 3단계 — <b>원본 → 트리 → depth</b> — 만 확대해서 봅니다.</p>
+</section>
+
+<section className="slide dd" data-title="목표 미리보기">
+<div className="kicker">먼저 목적지부터</div>
+<h2>결국 만들려는 건 <span className="hl">이 표</span> 하나</h2>
+<p className="lead" style={{maxWidth:'60ch'}}>서버로 보내는 최종 형태. 노드(연산자) 하나가 한 줄, 각 컬럼은 배열로 전송된다.</p>
+<div className="tscroll">
+  <table className="data final">
+    <thead><tr><th>id</th><th>parent_id</th><th>operator</th><th>cardinality</th><th>total_cost</th><th>depth</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>-1</td><td className="txt">RETURN</td><td>1000</td><td>120</td><td className="hd">0</td></tr>
+      <tr><td>2</td><td>1</td><td className="txt">NLJOIN</td><td>1000</td><td>120</td><td className="hd">1</td></tr>
+      <tr><td>3</td><td>2</td><td className="txt">TBSCAN</td><td>1000</td><td>80</td><td className="hd">2</td></tr>
+      <tr><td>4</td><td>2</td><td className="txt">TBSCAN</td><td>50</td><td>10</td><td className="hd">2</td></tr>
+    </tbody>
+  </table>
+</div>
+<p className="foot"><b>id · parent_id · depth</b> 세 개가 트리의 뼈대(모양). 나머지(operator·cost)는 노드에 붙는 살. 앞으로의 모든 단계는 결국 <b>이 표를 채우기 위한 과정</b>이다.</p>
+</section>
+
+<section className="slide dd" data-title="STEP 1 원본">
+<div className="kicker">STEP 1 · 원본 데이터</div>
+<h2>DB가 주는 건 <span className="hl">화살표 목록</span>이다</h2>
+<div className="cols">
+  <div>
+    <div className="cap">EXPLAIN_STREAM (일부 컬럼)</div>
+    <table className="data">
+      <thead><tr><th>source_id<small>자식</small></th><th></th><th>target_id<small>부모</small></th></tr></thead>
+      <tbody>
+        <tr><td>3</td><td className="ar">→</td><td>2</td></tr>
+        <tr><td>4</td><td className="ar">→</td><td>2</td></tr>
+        <tr><td>2</td><td className="ar">→</td><td>1</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div className="explain">
+    <p>한 줄 = <b>화살표 하나</b>.</p>
+    <p className="read"><span className="chip">3 → 2</span><br/>"3번이 2번에게 데이터를 준다"</p>
+    <p className="muted">데이터는 아래(테이블)에서 위(결과)로 흐른다.<br/>그래서 source=자식, target=부모.</p>
+  </div>
+</div>
+</section>
+
+<section className="slide dd" data-title="STEP 2 트리">
+<div className="kicker">STEP 2 · 트리 만들기</div>
+<h2>화살표를 이으면 <span className="hl">나무</span>가 된다</h2>
+<div className="cols">
+  <div className="treebox">
+    <svg viewBox="0 0 320 240" className="tree" role="img" aria-label="노드1 밑에 2, 2 밑에 3과 4가 달린 트리">
+      <line x1="160" y1="48" x2="160" y2="96"/>
+      <line x1="160" y1="120" x2="80" y2="168"/>
+      <line x1="160" y1="120" x2="240" y2="168"/>
+      <g className="nd"><circle cx="160" cy="32" r="22"/><text x="160" y="39">1</text></g>
+      <g className="nd"><circle cx="160" cy="110" r="22"/><text x="160" y="117">2</text></g>
+      <g className="nd leaf"><circle cx="80" cy="186" r="22"/><text x="80" y="193">3</text></g>
+      <g className="nd leaf"><circle cx="240" cy="186" r="22"/><text x="240" y="193">4</text></g>
+    </svg>
+  </div>
+  <div className="explain">
+    <p>같은 화살표를 <b>두 방향</b>으로 적어둔다:</p>
+    <div className="maps">
+      <div className="map"><span className="mtag down">tree</span> 부모 → 자식들<br/><code>1→[2] , 2→[3,4]</code><small>내려가며 depth 셀 때 씀</small></div>
+      <div className="map"><span className="mtag up">parentMap</span> 자식 → 부모<br/><code>2→1 , 3→2 , 4→2</code><small>parent_id 채울 때 씀</small></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<section className="slide dd" data-title="왜 tree?">
+<div className="kicker">STEP 2 · 보충 ①</div>
+<h2>왜 <span className="hl">tree</span>(부모→자식)가 필요할까?</h2>
+<div className="cols">
+  <div className="explain">
+    <p><b>depth는 위에서 아래로</b> 세야 한다.<br/>맨 위 1번(0칸)에서 시작 → 자식으로 내려가며 +1.</p>
+    <p className="read">"1번 밑에 누가 있지?"를 알아야 2번으로 내려간다.<br/>"2번 밑엔?"을 알아야 3·4번으로 내려간다.</p>
+    <p className="muted">🔑 내려가려면 <b>부모→자식</b> 방향 지도가 꼭 필요.</p>
+  </div>
+  <div className="explain">
+    <div className="askbox bad">
+      <div className="asklbl">✗ parentMap만 있으면</div>
+      <code>3→2 · 4→2 · 2→1</code>
+      <p>전부 <b>위로만</b> 가리킨다. "1번 밑에 누가 있나?"를 알 수 없어 내려갈 수 없음.</p>
+    </div>
+    <div className="askbox ok">
+      <div className="asklbl">✓ tree가 있으면</div>
+      <code>1→[2] · 2→[3,4]</code>
+      <p>"1번 밑=2번, 2번 밑=3·4번" 바로 앎 → 내려가며 depth 계산 가능.</p>
+    </div>
+  </div>
+</div>
+</section>
+
+<section className="slide dd" data-title="왜 parentMap?">
+<div className="kicker">STEP 2 · 보충 ②</div>
+<h2>왜 <span className="hl">parentMap</span>(자식→부모)가 필요할까?</h2>
+<div className="cols">
+  <div className="explain">
+    <p>최종 표에는 <b>parent_id</b>(내 부모가 누구) 컬럼이 있다. 이걸 채우려면 "내 부모 = 몇 번?"을 <b>바로</b> 알아야 한다.</p>
+    <table className="data mini">
+      <thead><tr><th>id</th><th>parent_id</th></tr></thead>
+      <tbody>
+        <tr><td>3</td><td className="hd">?</td></tr>
+      </tbody>
+    </table>
+    <p className="muted">3번 행의 parent_id 칸을 채우는 순간을 생각해보자.</p>
+  </div>
+  <div className="explain">
+    <div className="askbox ok">
+      <div className="asklbl">✓ parentMap이 있으면</div>
+      <code>parentMap[3] = 2</code>
+      <p>한 번에 "3번 부모=2번" → parent_id에 <b>2</b> 즉시 기입.</p>
+    </div>
+    <div className="askbox bad">
+      <div className="asklbl">✗ tree만 있으면</div>
+      <code>1→[2] · 2→[3,4]</code>
+      <p>3번의 부모를 찾으려면 모든 목록을 뒤져 "3이 어느 자식목록에 있나" 검색해야 함. 느리고 번거로움.</p>
+    </div>
+  </div>
+</div>
+</section>
+
+<section className="slide dd" data-title="비유: 조직도">
+<div className="kicker">한 줄 비유</div>
+<h2>결국 <span className="hl">같은 조직도</span>를 두 방향으로 본 것</h2>
+<div className="analogy">
+  <div className="acard">
+    <div className="atag down">tree · 부모→자식</div>
+    <div className="abig">"내 밑에 누구 있어?"</div>
+    <p>사장부터 <b>아래로</b> 훑으며 "몇 단계 아래인지"(depth)를 센다.</p>
+  </div>
+  <div className="acard">
+    <div className="atag up">parentMap · 자식→부모</div>
+    <div className="abig">"내 상사가 누구야?"</div>
+    <p>각 직원에게 <b>바로</b> 상사를 물어 명찰(parent_id)에 적는다.</p>
+  </div>
+</div>
+<p className="foot">화살표 한 줄(<code>3→2</code>)을 읽을 때마다 두 지도에 동시에 적는다:
+  tree엔 <code>2 밑에 3 추가</code>, parentMap엔 <code>3의 부모는 2</code>.</p>
+</section>
+
+<section className="slide dd" data-title="왜 map 2개?">
+<div className="kicker">STEP 2 · 보충 ③</div>
+<h2>map 하나면 안 될까? — <span className="hl">컬럼이 2개</span>라서</h2>
+<p className="lead" style={{maxWidth:'62ch'}}>"내려가려면 tree 하나면 되잖아?" — 맞아. 근데 최종 표엔 <b>계산이 필요한 컬럼이 두 개</b>고, 둘은 서로 <b>반대 방향</b>이야.</p>
+<div className="twocol-note">
+  <div className="colcard a">
+    <div className="cc">depth 컬럼</div>
+    <div className="dir">↓ 위 → 아래</div>
+    <p>루트부터 내려가며 칸수 세기 → <b>tree</b>(부모→자식)로 계산</p>
+  </div>
+  <div className="colcard b">
+    <div className="cc">parent_id 컬럼</div>
+    <div className="dir">↑ 아래 → 위</div>
+    <p>각 노드가 "내 부모 몇 번?"에 바로 답 → <b>parentMap</b>(자식→부모)로 채움</p>
+  </div>
+</div>
+<p className="foot">tree 하나로 parent_id도 만들 순 있지만, "3의 부모?"를 매번 전체 자식목록을 뒤져야 함. 그래서 <b>미리 뒤집어둔 지도(parentMap)</b>를 같이 들고 다니는 것.</p>
+</section>
+
+<section className="slide dd" data-title="코드 흐름">
+<div className="kicker">코드에서 데이터가 도는 순서</div>
+<h2>한 번 적재 → <span className="hl">각 컬럼이 다른 map</span>을 읽는다</h2>
+<div className="cflow">
+  <div className="frow">
+    <div className="fnum">1</div>
+    <div className="fbody">
+      <div className="ftitle">적재 <span className="reads tree">쓰기 tree</span><span className="reads pm">쓰기 parentMap</span></div>
+      <code>3→2 읽으면 → tree에 "2밑에 3" · parentMap에 "3의 부모 2"</code>
+      <p>화살표 한 줄로 두 지도에 <b>동시 기록</b> (한 번의 루프에서)</p>
+    </div>
+  </div>
+  <div className="frow">
+    <div className="fnum">2</div>
+    <div className="fbody">
+      <div className="ftitle">depth 계산 <span className="reads tree">읽기 tree</span></div>
+      <code>calcDepth(tree, 1, 0) → depthMap</code>
+      <p><b>tree만</b> 타고 내려가며 depth[] 를 만든다 (parentMap 안 씀)</p>
+    </div>
+  </div>
+  <div className="frow">
+    <div className="fnum">3</div>
+    <div className="fbody">
+      <div className="ftitle">표 출력 <span className="reads pm">읽기 parentMap</span></div>
+      <code>for (자식→부모 in parentMap) \{ parent_id = 부모; depth = depthMap[자식] \}</code>
+      <p><b>parentMap을 돌며</b> 각 노드 행을 찍고, 2단계가 만든 depth를 붙인다</p>
+    </div>
+  </div>
+</div>
+<p className="foot">→ tree를 읽는 코드(2단계)와 parentMap을 읽는 코드(3단계)가 <b>서로 달라서</b> 두 map이 다 필요한 것.</p>
+</section>
+
+<section className="slide dd" data-title="저장 코드 해부">
+<div className="kicker">저장 코드 해부</div>
+<h2>한 행이 <span className="hl">두 map에 동시에</span> 들어간다</h2>
+<div className="cols">
+  <div>
+    <div className="clabel">원본 행 읽을 때 실행 <span className="cref">Db2Helper.java · collectRows() :562~564</span></div>
+
+```
+tree.computeIfAbsent(target, k->new ArrayList<>())
+    .add(source);   // 없으면 생성, 있으면 재사용
+parentMap.put(source, target); // 자식=key,부모=value
+```
+
+    <div className="rulebox" style={{marginTop:'14px'}}>
+      <div className="rl">get-or<br/>create</div>
+      <div className="rr"><b>computeIfAbsent</b>: target이 <b>처음</b>이면 빈 리스트 만들어 넣고, <b>이미 있으면</b> 그 리스트 재사용 → 거기에 자식 add</div>
+    </div>
+  </div>
+  <div>
+    <div className="clabel">행 3개 넣는 과정</div>
+
+```
+// 행 3→2
+tree: 2없음→[]만들고 3 add  → {2:[3]}
+pMap: put(3,2)             → {3:2}
+
+// 행 4→2
+tree: 2있음→[3]재사용 4add → {2:[3,4]}
+pMap: put(4,2)             → {3:2,4:2}
+
+// 행 2→1
+tree: 1없음→[]만들고 2 add  → {2:[3,4],1:[2]}
+pMap: put(2,1)             → {3:2,4:2,2:1}
+```
+
+  </div>
+</div>
+</section>
+
+<section className="slide dd" data-title="map 내용">
+<div className="kicker">map 안엔 결국 뭐가 들어있나</div>
+<h2>두 지도의 <span className="hl">최종 내용</span></h2>
+<p className="lead" style={{maxWidth:'60ch'}}>원본 화살표 3개(<code>3→2 · 4→2 · 2→1</code>)를 다 읽고 나면, 두 map은 이렇게 채워진다.</p>
+<div className="mapdump">
+  <div className="md a">
+    <div className="mdh">tree <span>key=부모 → value=자식들</span></div>
+
+```
+{
+  1 : [2],     // 1 밑에 2
+  2 : [3, 4]   // 2 밑에 3,4
+}
+```
+
+  </div>
+  <div className="md b">
+    <div className="mdh">parentMap <span>key=자식 → value=부모</span></div>
+
+```
+{
+  1 : -1,   // 1은 최상단(부모없음)
+  2 : 1,    // 2의 부모 1
+  3 : 2,    // 3의 부모 2
+  4 : 2     // 4의 부모 2
+}
+```
+
+  </div>
+</div>
+<p className="foot">둘 다 같은 트리를 담지만 <b>방향(key↔value)이 반대</b>다. tree는 key=부모, parentMap은 key=자식.</p>
+</section>
+
+<section className="slide dd" data-title="꺼내 쓰기">
+<div className="kicker">하나하나 어떻게 꺼내 쓰나</div>
+<h2>key를 넣으면 <span className="hl">value가 나온다</span></h2>
+<div className="cols">
+  <div>
+    <div className="usehdr a">calcDepth 가 tree 를 꺼낼 때</div>
+    <div className="getrow"><code>tree.get(1)</code><span className="ar2">→</span><code>[2]</code><span className="ux">1 밑엔 2</span></div>
+    <div className="getrow"><code>tree.get(2)</code><span className="ar2">→</span><code>[3,4]</code><span className="ux">2 밑엔 3,4</span></div>
+    <div className="getrow"><code>tree.get(3)</code><span className="ar2">→</span><code>없음</code><span className="ux">멈춤(leaf)</span></div>
+    <p className="muted">부모 번호를 넣으면 자식목록이 나옴 → 내려가며 depth+1</p>
+  </div>
+  <div>
+    <div className="usehdr b">출력이 parentMap 을 꺼낼 때</div>
+    <div className="getrow"><code>parentMap.get(3)</code><span className="ar2">→</span><code>2</code><span className="ux">3의 부모=2</span></div>
+    <div className="getrow"><code>parentMap.get(4)</code><span className="ar2">→</span><code>2</code><span className="ux">4의 부모=2</span></div>
+    <div className="getrow"><code>parentMap.get(2)</code><span className="ar2">→</span><code>1</code><span className="ux">2의 부모=1</span></div>
+    <p className="muted">자식 번호를 넣으면 부모가 나옴 → parent_id 칸에 기입</p>
+  </div>
+</div>
+<p className="foot">→ 같은 트리인데 <b>필요한 방향으로 뽑아 쓴다</b>: 내려갈 땐 tree(부모→자식), 부모 찾을 땐 parentMap(자식→부모).</p>
+</section>
+
+<section className="slide dd" data-title="targetMap">
+<div className="kicker">세 번째 지도</div>
+<h2><span className="hl">targetMap</span> — 노드 상세 보관함</h2>
+<p className="lead" style={{maxWidth:'62ch'}}>tree·parentMap은 "연결"만 담는다. 각 노드의 <b>실제 정보</b>(operator·cost·cardinality·object)는 targetMap에 따로 저장.</p>
+<div className="cols">
+  <div>
+    <div className="clabel">저장 — rank=1 대표행만 <span className="cref">Db2Helper.java · collectRows() :566</span></div>
+
+```
+if (rank == 1)
+  targetMap.computeIfAbsent(target, ...)
+    .add(new PlanInfo(
+       source, target, operator_type,
+       cardinality, total_cost, object...));
+```
+
+    <p className="muted">rank=1 = target별 대표 stream 하나. 같은 노드 중복 저장 방지.</p>
+  </div>
+  <div>
+    <div className="md b">
+      <div className="mdh">targetMap <span>노드 → 상세정보</span></div>
+
+```
+{
+  1 : RETURN, cost 120, card 1000,
+  2 : NLJOIN, cost 120, card 1000,
+  3 : TBSCAN, cost  80, card 1000,
+  4 : TBSCAN, cost  10, card   50
+}
+```
+
+    </div>
+    <p className="muted">출력 때 노드 번호로 여기서 operator·cost를 꺼내 표에 채움 <span className="cref">populatePlanLists() :585</span></p>
+  </div>
+</div>
+</section>
+
+<section className="slide dd" data-title="depth는 없다">
+<div className="kicker">STEP 3 준비</div>
+<h2>원본엔 <span className="hl">depth가 없다</span></h2>
+<div className="twocol-note">
+  <div className="colcard b">
+    <div className="cc">parent_id</div>
+    <div className="dir">원본에 있음 → 복사</div>
+    <p><b>target_id</b>를 그대로 옮기면 끝. 계산 불필요.</p>
+  </div>
+  <div className="colcard a">
+    <div className="cc">depth</div>
+    <div className="dir">원본에 없음 → 계산</div>
+    <p>"몇 층 깊이" 숫자는 어디에도 없다. 연결을 따라 세서 <b>새로 만들어야</b> 함.</p>
+  </div>
+</div>
+<div className="tscroll">
+  <table className="data" style={{marginTop:'2px'}}>
+    <thead><tr><th>source_id</th><th>target_id</th><th>STREAM_COUNT</th><th>depth?</th></tr></thead>
+    <tbody>
+      <tr><td>3</td><td>2</td><td>1000</td><td className="none">없음</td></tr>
+      <tr><td>4</td><td>2</td><td>50</td><td className="none">없음</td></tr>
+      <tr><td>2</td><td>1</td><td>1000</td><td className="none">없음</td></tr>
+    </tbody>
+  </table>
+</div>
+<p className="foot">원본엔 "누가 누구 자식"(연결)만 있고 "몇 층"은 없다. → 그래서 <b>calcDepth</b> 계산이 따로 필요한 것.</p>
+</section>
+
+<section className="slide dd" data-title="STEP 3 depth">
+<div className="kicker">STEP 3 · depth 계산</div>
+<h2>맨 위 = 0, 자식마다 <span className="hl">+1</span> <span className="sub">(재귀로 반복)</span></h2>
+<div className="rulebox">
+  <div className="rl">계산<br/>규칙</div>
+  <div className="rr"><b>①</b> 맨 위(1번)는 depth <b>0</b> &nbsp;·&nbsp; <b>②</b> 자식 = 부모 depth <b>+1</b> &nbsp;·&nbsp; <b>③</b> 자식 없으면 멈춤</div>
+</div>
+<div className="cols">
+  <div className="trace">
+    <div className="tr t0"><span className="node">1</span> depth <b>0</b> <span className="tail">→ 자식 2에게 0+1</span></div>
+    <div className="tr t1"><span className="node">2</span> depth <b>1</b> <span className="tail">→ 자식 3,4에게 1+1</span></div>
+    <div className="tr t2"><span className="node">3</span> depth <b>2</b> <span className="tail">→ 자식 없음, 멈춤</span></div>
+    <div className="tr t2"><span className="node">4</span> depth <b>2</b> <span className="tail">→ 자식 없음, 멈춤</span></div>
+  </div>
+  <div className="explain">
+    <p className="read"><code>depthMap = \{1:0, 2:1, 3:2, 4:2\}</code></p>
+    <div className="indent">
+      <div style={{paddingLeft:0}}>[1] RETURN</div>
+      <div style={{paddingLeft:'22px'}}>[2] NLJOIN</div>
+      <div style={{paddingLeft:'44px'}}>[3] TBSCAN</div>
+      <div style={{paddingLeft:'44px'}}>[4] TBSCAN</div>
+    </div>
+    <p className="muted">depth 숫자 = 화면 들여쓰기 칸수.</p>
+  </div>
+</div>
+</section>
+
+<section className="slide dd" data-title="가지 갈라짐">
+<div className="kicker">STEP 3 · 심화</div>
+<h2>자식이 <span className="hl">여러 갈래로 갈라져도</span> 규칙은 똑같다</h2>
+<div className="cols">
+  <div className="treebox">
+    <svg viewBox="0 0 360 300" className="tree" role="img" aria-label="2번이 3,4,5 세 갈래로 갈라지고 4번 밑에 6번이 있는 트리">
+      <line x1="180" y1="54" x2="180" y2="88"/>
+      <line x1="180" y1="128" x2="70" y2="166"/>
+      <line x1="180" y1="128" x2="180" y2="166"/>
+      <line x1="180" y1="128" x2="290" y2="166"/>
+      <line x1="180" y1="206" x2="180" y2="240"/>
+      <g className="nd"><circle cx="180" cy="34" r="20"/><text x="180" y="41">1</text></g>
+      <g className="nd"><circle cx="180" cy="108" r="20"/><text x="180" y="115">2</text></g>
+      <g className="nd leaf"><circle cx="70" cy="186" r="20"/><text x="70" y="193">3</text></g>
+      <g className="nd"><circle cx="180" cy="186" r="20"/><text x="180" y="193">4</text></g>
+      <g className="nd leaf"><circle cx="290" cy="186" r="20"/><text x="290" y="193">5</text></g>
+      <g className="nd leaf"><circle cx="180" cy="260" r="20"/><text x="180" y="267">6</text></g>
+      <text className="dlbl" x="205" y="39">d0</text>
+      <text className="dlbl" x="205" y="113">d1</text>
+      <text className="dlbl" x="42" y="191">d2</text>
+      <text className="dlbl" x="205" y="191">d2</text>
+      <text className="dlbl" x="315" y="191">d2</text>
+      <text className="dlbl" x="205" y="265">d3</text>
+    </svg>
+  </div>
+  <div className="explain">
+    <div className="rulebox" style={{marginBottom:'14px'}}>
+      <div className="rl">핵심</div>
+      <div className="rr">같은 부모의 <b>형제들은 전부 같은 depth</b>(=부모+1).<br/>가지가 3개든 4개든 <b>for문이 하나씩</b> 처리한다.</div>
+    </div>
+
+```
+for (child : tree.get(node)) // 자식 몇 개든 반복
+  calcDepth(tree, child, depth+1); // 각자 부모+1
+```
+
+  </div>
+</div>
+<div className="tscroll" style={{marginTop:'10px'}}>
+
+```
+calcDepth(1,0) → 1:0
+ └ calcDepth(2,1) → 2:1          // 2의 자식 3개 [3,4,5] 를 for로 순회
+    ├ calcDepth(3,2) → 3:2       // 자식 없음, 멈춤
+    ├ calcDepth(4,2) → 4:2       // 자식 [6] → 한 칸 더 내려감
+    │    └ calcDepth(6,3) → 6:3  // 자식 없음, 멈춤
+    └ calcDepth(5,2) → 5:2       // 자식 없음, 멈춤
+```
+
+</div>
+</section>
+
+<section className="slide dd" data-title="STEP 4 표">
+<div className="kicker">STEP 4 · 서버 전송</div>
+<h2>노드마다 한 줄, <span className="hl">컬럼별 배열</span>로</h2>
+<table className="data final">
+  <thead><tr><th>id</th><th>parent_id</th><th>operator</th><th>depth</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>-1</td><td className="txt">RETURN</td><td className="hd">0</td></tr>
+    <tr><td>2</td><td>1</td><td className="txt">NLJOIN</td><td className="hd">1</td></tr>
+    <tr><td>3</td><td>2</td><td className="txt">TBSCAN</td><td className="hd">2</td></tr>
+    <tr><td>4</td><td>2</td><td className="txt">TBSCAN</td><td className="hd">2</td></tr>
+  </tbody>
+</table>
+<p className="foot">서버는 각 컬럼을 배열로 받음:
+  <code>id[]=\{1,2,3,4\}</code> · <code>depth[]=\{0,1,2,2\}</code>.
+  <b>같은 index = 한 노드.</b> 그래서 모든 배열 길이가 같아야 한다.</p>
+</section>
+
+<section className="slide dd" data-title="실제 코드">
+<div className="kicker">실제 코드로 한눈에</div>
+<h2>3단계, <span className="hl">진짜 자바 코드</span></h2>
+<div className="codegrid">
+  <div>
+    <div className="clabel">① 적재 — 두 map 동시 기록 <span className="cref">collectRows() :556</span></div>
+
+```
+while (rs.next()) {
+  int target = rs.getInt("target_id"); // 부모
+  int source = rs.getInt("source_id"); // 자식
+  tree.computeIfAbsent(target, k->new ArrayList<>())
+      .add(source);           // 부모→자식
+  parentMap.put(source, target); // 자식→부모
+}
+```
+
+  </div>
+  <div>
+    <div className="clabel">② depth — <span className="hlc">tree</span>만 읽어 재귀 <span className="cref">calcDepth() :126</span></div>
+
+```
+void calcDepth(tree, node, depth) {
+  depthMap.put(node, depth);
+  for (child : tree.get(node))
+    calcDepth(tree, child, depth+1); // +1
+}
+```
+
+    <div className="clabel">③ 출력 — <span className="hlc2">parentMap</span> 돌며 표 채우기 <span className="cref">populatePlanLists() :580</span></div>
+
+```
+calcDepth(tree, 1, 0);
+for ((source,target) : parentMap) {
+  id.add(source);
+  parent_id.add(target);
+  depth.add(depthMap.get(source));
+}
+```
+
+  </div>
+</div>
+<p className="foot"><span className="hlc">tree</span>=파랑(부모→자식, depth용) · <span className="hlc2">parentMap</span>=초록(자식→부모, parent_id용). 실제 파일: <code>Db2Helper.java</code></p>
+</section>
+
+<section className="slide dd" data-title="두 경로 공유">
+<div className="kicker">ExplainPlan · CachedPlan 공통</div>
+<h2>두 경로가 <span className="hl">같은 3개 map</span>을 쓴다</h2>
+<div className="sharewrap">
+  <div className="sentry">
+    <div className="sname">plan() <small>ExplainPlan · Db2Helper.java:214</small></div>
+    <div className="ssrc">explain plan selection ... for &lt;SQL&gt;</div>
+  </div>
+  <div className="sentry">
+    <div className="sname">planCached() <small>CachedPlan · Db2Helper.java:383</small></div>
+    <div className="ssrc">EXPLAIN_FROM_SECTION(executable_id)</div>
+  </div>
+  <div className="smerge">↓ 데이터 출처만 다르고, 이후는 동일 ↓</div>
+  <div className="score"><b>tree · parentMap · targetMap</b> 채우기 → <b>calcDepth()</b> 로 depth 계산 → 표 배열로 전송</div>
+</div>
+<p className="foot">계산 로직 <code>calcDepth() Db2Helper.java:126</code> 은 <b>완전 공용</b>. 그래서 depth 엣지케이스도 <b>양쪽에 동일</b>하게 존재한다.</p>
+</section>
+
+<section className="slide dd" data-title="에러 지점">
+<div className="kicker err">여기가 버그 지점</div>
+<h2>depth만 <span className="hl bad">빠지면</span> 전부 밀린다</h2>
+<div className="cols">
+  <div>
+
+```
+// depth는 값이 있을 때만 add
+Integer dep = depthMap.get(pi.id);
+if (dep != null) L.depth.add(dep);
+L.id.add(pi.id);        // 나머진 무조건
+L.parent_id.add(...);
+```
+
+  </div>
+  <div className="explain">
+    <p>어떤 노드가 루트(1)에서 tree로 안 이어지면 <code>dep = null</code> → depth만 한 칸 부족.</p>
+    <div className="cmp">
+      <div className="ok">정상<br/><code>id[]&nbsp;&nbsp;&nbsp;=\{1,2,3,4\}</code><br/><code>depth[]=\{0,1,2,2\}</code></div>
+      <div className="ng">버그<br/><code>id[]&nbsp;&nbsp;&nbsp;=\{1,2,3,4\}</code><br/><code>depth[]=\{0,1,2\}</code> ←밀림</div>
+    </div>
+    <p className="muted">→ 서버가 depth를 다른 노드 것으로 착각 = calc 에러.</p>
+  </div>
+</div>
+</section>
