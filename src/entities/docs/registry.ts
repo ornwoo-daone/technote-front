@@ -126,6 +126,12 @@ export const DOCS: readonly Doc[] = [
     k: 'fsd feature sliced design 아키텍처 구조 층 레이어 layer slice 의존 방향 import features entities widgets shared 판단 기준 atomic design clean architecture hexagonal bulletproof react mvc 폴더 구조 단점 순환 참조',
     load: () => import('./content/react/fsd-architecture.mdx') },
 
+  { cat: 'db2', slug: 'calcdepth-parentmap', session: 'work', at: '2026-08-12',
+    t: 'calcDepth — tree DFS vs parentMap',
+    d: '다중 뎁스에서 depth가 운에 좌우되는 이유와 parent_id 정합 해법. 도식+라인바이라인',
+    k: 'calcdepth parentmap tree dfs depth 다중 뎁스 다이아몬드 순환 자기참조 고아 노드 들여쓰기 불일치 stackoverflow 무한재귀 가드',
+    load: () => import('./content/db2/calcdepth-parentmap.mdx') },
+
   { cat: 'db2', slug: 'db2-savingplan-design', session: 'work', at: '2026-08-12', deploy: 'pending',
     t: 'SavingPlan 구현 설계 · 데이터 플로우',
     d: 'Oracle 구조 대조 → 변경 파일 5개 → DB2 고유 난점 3가지',

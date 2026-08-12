@@ -1,0 +1,266 @@
+<Slide kick="DBX · 설계 비교">
+<h1>calcDepth 두 가지 방식<br/>tree DFS vs parentMap</h1>
+<Lead>plan 트리의 **depth(들여쓰기 단계)** 를 계산하는 두 구현을 비교한다.
+같은 데이터를 **반대 방향으로 읽는** 차이가 어떤 결과 차이를 만드는지 — 도식 먼저, 코드는 라인바이라인으로.</Lead>
+<Muted>배경: calcDepth 무한재귀 가드 작업 중 "다중 뎁스" 엣지케이스 발견 (2026-08-12 실측)</Muted>
+</Slide>
+
+<Slide kick="출발점">
+## 한 행이 지도 두 개를 만든다
+
+<Lead>DB2가 주는 건 `EXPLAIN_STREAM` 의 **간선 목록**뿐이다. 행 하나 (source=3, target=2) 가 들어오면 에이전트는 지도 두 개에 나눠 적는다.</Lead>
+
+<svg className="dg" viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg">
+  <rect x="270" y="20" width="180" height="44" rx="10" className="dg-box acc"/>
+  <text x="360" y="38" textAnchor="middle" className="dg-t">STREAM 행</text>
+  <text x="360" y="55" textAnchor="middle" className="dg-mono">source=3, target=2</text>
+  <path d="M310 64 L180 110" className="dg-line"/>
+  <path d="M410 64 L540 110" className="dg-line"/>
+  <rect x="60" y="115" width="240" height="70" rx="10" className="dg-box"/>
+  <text x="180" y="140" textAnchor="middle" className="dg-t">tree (부모 → 자식들)</text>
+  <text x="180" y="162" textAnchor="middle" className="dg-mono">2 → [ 3 ]</text>
+  <text x="180" y="178" textAnchor="middle" className="dg-tm">"2의 자식 목록에 3을 추가"</text>
+  <rect x="420" y="115" width="240" height="70" rx="10" className="dg-box"/>
+  <text x="540" y="140" textAnchor="middle" className="dg-t">parentMap (자식 → 부모)</text>
+  <text x="540" y="162" textAnchor="middle" className="dg-mono">3 → 2</text>
+  <text x="540" y="178" textAnchor="middle" className="dg-tm">"3의 부모는 2" (하나뿐)</text>
+</svg>
+
+<Note>둘 다 <b>같은 행</b>에서 나왔다. 그런데 depth를 <b>어느 지도로 계산하느냐</b>에 따라 결과가 달라진다.</Note>
+</Slide>
+
+<Slide kick="기존 방식">
+## tree DFS — 위에서 아래로 "뿌리기"
+
+<Lead>루트(1)에서 출발해 자식 목록을 따라 내려가며 depth를 **나눠준다**.</Lead>
+
+<svg className="dg" viewBox="0 0 720 260" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="360" cy="45" r="22" className="dg-node"/>
+  <text x="360" y="51" className="dg-nt">1</text>
+  <text x="410" y="50" className="dg-mono">depth 0 부여</text>
+  <path d="M345 62 L265 105" className="dg-line"/>
+  <path d="M375 62 L455 105" className="dg-line"/>
+  <circle cx="255" cy="125" r="22" className="dg-node"/>
+  <text x="255" y="131" className="dg-nt">2</text>
+  <text x="150" y="130" className="dg-mono">depth 1 부여</text>
+  <circle cx="465" cy="125" r="22" className="dg-node"/>
+  <text x="465" y="131" className="dg-nt">3</text>
+  <text x="510" y="130" className="dg-mono">depth 1 부여</text>
+  <path d="M255 147 L255 190" className="dg-line"/>
+  <circle cx="255" cy="212" r="22" className="dg-node leaf"/>
+  <text x="255" y="218" className="dg-nt">4</text>
+  <text x="150" y="217" className="dg-mono">depth 2 부여</text>
+</svg>
+
+- 방문하는 김에 depth를 찍는다: 루트 0, 한 칸 내려갈 때마다 +1
+- 트리가 **진짜 트리**(도달 경로가 노드마다 하나)면 완벽하게 동작한다
+</Slide>
+
+<Slide kick="문제" err>
+## 도달 경로가 두 개면? — 다이아몬드
+
+<Lead>노드 3에 **직행(1→3)** 과 **경유(1→2→3)** 두 길이 있으면, DFS는 먼저 도착한 길의 depth를 준다.</Lead>
+
+<svg className="dg" viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="360" cy="40" r="22" className="dg-node"/>
+  <text x="360" y="46" className="dg-nt">1</text>
+  <path d="M340 55 L270 100" className="dg-line"/>
+  <path d="M380 55 L450 175" className="dg-line" strokeDasharray="6 5"/>
+  <circle cx="258" cy="120" r="22" className="dg-node"/>
+  <text x="258" y="126" className="dg-nt">2</text>
+  <path d="M275 135 L410 190" className="dg-line"/>
+  <circle cx="430" cy="200" r="22" className="dg-node leaf"/>
+  <text x="430" y="206" className="dg-nt">3</text>
+  <text x="120" y="105" className="dg-mono">경유: 1→2→3 = depth 2</text>
+  <text x="490" y="130" className="dg-mono">직행: 1→3 = depth 1</text>
+  <text x="480" y="215" className="dg-badf" style={{fontFamily:'var(--mono)',fontSize:'13px'}}>depth = 1? 2?</text>
+</svg>
+
+<Warn><b>어느 길이 먼저 방문되느냐는 SQL 행 순서가 정한다</b> = 사실상 운.
+실측: 같은 구조에서 행 순서만 바꾸면 3의 depth가 1 ↔ 2 로 널뛰었고, 깊이차를 키우자 <b>parent는 depth 0인데 자식은 depth 4</b>까지 나왔다.</Warn>
+</Slide>
+
+<Slide kick="문제의 핵심" err>
+## depth와 parent_id의 출처가 다르다
+
+<Lead>서버로 보내는 pack에는 둘 다 들어가는데, **각자 다른 규칙**으로 정해진다.</Lead>
+
+| 필드 | 출처 | 규칙 |
+|---|---|---|
+| `parent_id` | parentMap | **마지막 행** 승 |
+| `depth` (기존) | tree DFS | **방문 순서** 승 — 별개 규칙 |
+
+- 두 규칙이 다이아몬드에서 서로 다른 길을 고르면 → **어긋난 조합**이 서버로 감
+- UI는 parent 밑에 자식을 depth만큼 들여쓰는데, `depth(자식) ≠ depth(parent)+1` 이면 **들여쓰기가 밀린 트리**가 그려진다
+
+<Note>그래서 해법의 방향은 "DFS를 고치자"가 아니라 — <b>depth를 parent_id 와 같은 소스에서 뽑자</b>.</Note>
+</Slide>
+
+<Slide kick="대안">
+## parentMap — 아래에서 위로 "세기"
+
+<Lead>각 노드에서 **부모를 따라 올라가며** 몇 계단이면 루트인지 센다.</Lead>
+
+<svg className="dg" viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="360" cy="200" r="22" className="dg-node leaf"/>
+  <text x="360" y="206" className="dg-nt">3</text>
+  <path d="M360 178 L360 142" className="dg-line"/>
+  <text x="385" y="163" className="dg-mono">↑ 1계단</text>
+  <circle cx="360" cy="120" r="22" className="dg-node"/>
+  <text x="360" y="126" className="dg-nt">2</text>
+  <path d="M360 98 L360 62" className="dg-line"/>
+  <text x="385" y="83" className="dg-mono">↑ 2계단</text>
+  <circle cx="360" cy="40" r="22" className="dg-node"/>
+  <text x="360" y="46" className="dg-nt">1</text>
+  <text x="430" y="45" className="dg-tm">루트 도착!</text>
+  <text x="160" y="120" className="dg-goodf" style={{fontFamily:'var(--mono)',fontSize:'14px',fontWeight:700}}>depth(3) = 2계단 = 2</text>
+</svg>
+
+- parentMap은 노드당 부모가 **딱 하나** → 올라가는 길이 유일 → **운이 개입할 자리가 없다**
+- `depth(자식) = depth(부모) + 1` 이 **정의에서 저절로** 성립 — parent_id와 어긋나는 게 불가능
+</Slide>
+
+<Slide kick="코드 ①">
+## 기존 코드 — 라인바이라인
+
+```java
+private static void calcDepth(Map<Integer, List<Integer>> tree,
+                              int node, int depth,
+                              Map<Integer, Integer> depthMap) {
+    depthMap.put(node, depth);
+    if (tree.containsKey(node)) {
+        for (Integer child : tree.get(node)) {
+            if (child != -1) {
+                calcDepth(tree, child, depth + 1, depthMap);
+            }
+        }
+    }
+}
+```
+
+- **1행** `tree` = 부모→자식들 지도. 이 지도를 타고 내려간다
+- **4행** 지금 서 있는 노드에 depth를 기록 — <b>재방문하면 덮어쓴다</b> (다중 뎁스에서 마지막 방문 승이 되는 이유)
+- **5행** 자식이 있는 노드인가?
+- **6행** 자식들을 하나씩 순회
+- **7행** `-1` 은 "자식 없음" 표기라 건너뜀
+- **8행** 자식으로 내려가 재귀, depth는 +1 — <b>순환 간선이면 여기서 무한재귀</b> → StackOverflowError
+</Slide>
+
+<Slide kick="코드 ②">
+## 1차 수정 — 가드 한 줄
+
+```java
+private static void calcDepth(Map<Integer, List<Integer>> tree,
+                              int node, int depth,
+                              Map<Integer, Integer> depthMap) {
+    if (depthMap.containsKey(node)) return;   // ← 추가된 한 줄
+    depthMap.put(node, depth);
+    ...
+```
+
+- **4행** 이미 depth가 찍힌 노드로 다시 들어오면 그냥 리턴
+- 순환(2→3→2)이든 자기참조(2→2)든 중복 간선이든 — <b>"재방문"이라는 공통 패턴</b>을 입구에서 끊으니 무한재귀는 전부 해결
+
+<Warn>대신 부작용 — 덮어쓰기가 사라지면서 <b>첫 방문 승</b>으로 바뀐다.
+다이아몬드에서 depth가 방문 순서(=행 순서=운)에 좌우되는 건 그대로고, parent_id 와 어긋나는 조합이 생긴다. 실측에서 매번 불일치 1건.</Warn>
+</Slide>
+
+<Slide kick="코드 ③">
+## parentMap 버전 — 뼈대
+
+```java
+static Map<Integer, Integer> calcDepth(Map<Integer, Integer> parentMap) {
+    Map<Integer, Integer> depthMap = new HashMap<>();
+    for (Integer node : parentMap.keySet()) {
+        if (depthMap.containsKey(node)) continue;
+        // ... 이 노드에서 부모를 따라 올라간다 (다음 슬라이드)
+    }
+    return depthMap;
+}
+```
+
+- **1행** 입력이 `tree`가 아니라 **`parentMap`** — parent_id 와 같은 소스
+- **3행** 루트에서 출발하지 않고 **모든 노드를 각자** 처리 → 루트에서 끊긴 고아 노드도 자연히 계산됨 (기존엔 depth 누락 → 별도 보정 필요했음)
+- **4행** 이미 계산된 노드는 건너뜀 (캐시)
+</Slide>
+
+<Slide kick="코드 ④">
+## parentMap 버전 — 올라가기 라인바이라인
+
+```java
+List<Integer> path = new ArrayList<>();     // 올라온 길 기록
+Set<Integer> onPath = new HashSet<>();      // 이번 등반에서 밟은 노드
+int cur = node;
+Integer baseDepth = null;
+while (true) {
+    if (depthMap.containsKey(cur)) {        // 이미 depth 아는 노드 도착
+        baseDepth = depthMap.get(cur); break;
+    }
+    if (!onPath.add(cur)) {                 // 밟았던 노드 또 밟음 = 순환
+        baseDepth = 0; break;
+    }
+    path.add(cur);
+    Integer p = parentMap.get(cur);
+    if (p == null || p == -1) {             // 부모 없음 = 루트
+        baseDepth = -1; break;
+    }
+    cur = p;                                // 한 계단 위로
+}
+```
+
+- **1행** 나중에 depth를 되돌려 채우려고 지나온 노드를 순서대로 담는다
+- **6~8행** 계산해 둔 노드를 만나면 거기서 멈춤 — 같은 경로를 두 번 안 올라간다 (50만 노드 91ms의 비결)
+- **9~11행** `Set.add` 가 false = 이번 등반에서 밟았던 노드 = **순환**. 무한루프 대신 그 지점을 기준 삼고 끊는다
+- **13~16행** 부모가 없거나 -1이면 루트 도착. `-1` 로 두면 다음 슬라이드에서 루트가 depth 0이 된다
+- **17행** 재귀 없이 `cur` 만 갈아끼움 — 아무리 깊어도 **스택 안전**
+</Slide>
+
+<Slide kick="코드 ⑤">
+## parentMap 버전 — 내려오며 채우기
+
+```java
+for (int i = path.size() - 1; i >= 0; i--) {
+    baseDepth = baseDepth + 1;
+    depthMap.put(path.get(i), baseDepth);
+}
+```
+
+- **1행** `path` 는 [출발노드, …, 꼭대기 직전] 순서 — **거꾸로**(꼭대기 쪽부터) 내려온다
+- **2행** 기준점에서 한 계단 내려올 때마다 +1. 루트였다면 -1 → 0 → 1 → …
+- **3행** 지나온 노드 **전부** 캐시에 저장 — 다음 노드가 이 경로를 만나면 6행에서 바로 멈춘다
+
+<Note>예: 3→2→1 등반이면 path=[3,2], 루트 기준 -1 → 2에 0+1=1, 3에 1+1=2. <b>depth(3)=2, depth(2)=1, depth(1)=0</b> — parent 체인과 정확히 한 계단씩.</Note>
+</Slide>
+
+<Slide kick="실측">
+## 시나리오 11개 비교 결과
+
+| 시나리오 | 가드 한 줄 | parentMap |
+|---|---|---|
+| 뎁스 1 · 일반 트리 · 같은깊이 다이아몬드 · 중복 간선 | <G>정상</G> | <G>정상 (동일)</G> |
+| **다중 뎁스 (깊이차 1~3, 행 순서 2종)** | <B>매번 불일치 1건</B> | <G>전부 0건</G> |
+| 순환 간선 · 자기참조 | <W>종료 O, 불일치 1건</W> | <W>종료 O, 불일치 1건 (동급)</W> |
+| **고아 노드** | <B>depth 누락 (보정 필요)</B> | <G>자연히 계산</G> |
+| 사슬 5,000 | <G>1ms</G> | <G>3ms</G> |
+| **사슬 50,000 / 500,000** | <B>StackOverflowError</B> | <G>15ms / 91ms</G> |
+
+- 순환·자기참조의 불일치 1건은 **데이터 자체가 트리로 표현 불가**라 어느 방식이든 불가피
+- 정상 케이스는 두 방식 결과가 **완전 동일** — parentMap 전환이 기존 화면을 바꾸지 않는다는 뜻
+</Slide>
+
+<Slide kick="정리">
+## 한 장 요약
+
+| | tree DFS (기존/가드) | parentMap |
+|---|---|---|
+| 방향 | 루트에서 **내려가며 뿌림** | 각 노드에서 **올라가며 셈** |
+| 다중 뎁스 | 방문 순서 = <B>운</B> | 경로 유일 = <G>결정적</G> |
+| parent_id 정합 | 별개 규칙 → 어긋날 수 있음 | <G>같은 소스 → 정의상 항상 정합</G> |
+| 고아 노드 | 못 감 (누락) | <G>자연 처리</G> |
+| 순환/자기참조 | 가드 있으면 안전 | <G>안전</G> |
+| 구현 | 재귀 (스택 한계) | <G>반복문</G> |
+| 변경량 | 한 줄 | 함수 교체 + 호출부 1줄 |
+
+<Note><b>결론</b>: 무한재귀만 막으면 되면 가드 한 줄로 충분. 화면 들여쓰기의 <b>정확성까지 보장</b>하려면 depth는 parent_id 와 같은 소스(parentMap)에서 계산해야 한다.</Note>
+<Muted>검증 코드: scratchpad ParentMapDepthTest.java (시나리오 11개) · 2026-08-12</Muted>
+</Slide>
