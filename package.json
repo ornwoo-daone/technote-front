@@ -1,5 +1,5 @@
 {
-  "name": "technote",
+  "name": "technote-front",
   "version": "1.0.0",
   "private": true,
   "description": "Tech Note (DB & DBX) — React 19 + Node 22, dev: Vite / prod: webpack",
