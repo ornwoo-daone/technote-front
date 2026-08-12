@@ -22,6 +22,20 @@ MDX 는 dev `@mdx-js/rollup`, prod `@mdx-js/loader` 로 서로 다른 플러그�
 - 원본 쪽에 git 자동 스냅샷(`serve_guide.py`, 30초 주기)이 돈다 → 되돌리기: `git -C C:\htmls log`
 - junction 재생성: `cmd /c mklink /J C:\projects\technote-front\public C:\htmls\dbx-guide`
 
+### git 이 junction 을 끊는다 — 실제로 발생한 사고
+
+**`public/` 은 이 저장소에서 추적하지 않는다**(`.gitignore`). 파일의 주인은 `C:\htmls` 저장소다.
+같이 추적하면 같은 파일에 주인이 둘이 되고, **Git for Windows 는 junction 을 이해하지 못해
+링크를 통과해 쓰는 대신 링크 자체를 끊고 일반 디렉토리로 갈아치운다.**
+
+- 방아쇠가 된 명령: `git checkout <다른 브랜치>` (그 외 `stash` `reset --hard` `clean` `pull` 도 동일)
+- 증상: 아이콘·`guide.css`·레거시 HTML 이 통째로 사라진 것처럼 보인다. 실제 원본은 멀쩡하다.
+- 진단: `(Get-Item public -Force).LinkType` 이 비어 있으면 링크가 끊긴 것
+- 회복: 가짜 디렉토리 제거 → 위 `mklink` 재실행. `npm run test` 가 이 상태를 잡는다.
+
+**그래서 이 저장소는 브랜치를 파지 않고 `master` 에 직접 커밋한다.**
+브랜치 전환 자체가 위험 요인이라, 일반적인 권장(브랜치 우선)보다 이 제약이 우선한다.
+
 ## 레거시와 공존 중
 
 `C:\htmls\serve_guide.py` (port 8777) 가 바탕화면 "Tech Note" 앱이 쓰는 서버로 계속 살아 있다.

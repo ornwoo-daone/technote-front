@@ -1,7 +1,7 @@
 // 레지스트리 정합성 — 타입도 빌드도 못 잡는 구멍만 검사한다.
 // (없는 .mdx 를 가리키는 load 경로는 번들러가 이미 빌드 에러로 잡으므로 여기서 안 본다)
 import { describe, it, expect } from 'vitest';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, lstatSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CATS, DOCS, GROUPS, SESSIONS, docKey, docsOf, findDoc, sessionsOf, catsOfGroup } from './registry';
@@ -10,7 +10,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 const contentDir = join(here, 'content');
 const iconsDir = join(here, '../../../public/assets/icons');
 
+const publicDir = join(here, '../../../public');
+
 const catOf = (f: string) => CATS.find((c) => c.f === f);
+
+describe('public junction', () => {
+  // 과거 사고: 브랜치 전환 중 git 이 junction 을 끊고 일반 디렉토리로 갈아치웠다.
+  // 아이콘·guide.css·레거시 HTML 이 통째로 안 보이게 되는데, 아래 아이콘 테스트만으로는
+  // "파일이 없다"고만 나와 원인을 찾기 어렵다. 그래서 링크 자체를 따로 본다.
+  it('public 이 C:\\htmls\\dbx-guide 로의 링크로 살아 있다', () => {
+    if (process.platform !== 'win32') return; // 윈도우 전용 로컬 셋업
+    expect(existsSync(publicDir), 'public 디렉토리가 없다').toBe(true);
+    expect(
+      lstatSync(publicDir).isSymbolicLink(),
+      'public 이 junction 이 아니라 일반 디렉토리다 — README 의 mklink 명령으로 재생성할 것',
+    ).toBe(true);
+  });
+});
 
 describe('CATS', () => {
   it('카테고리 id(f) 가 중복되지 않는다', () => {

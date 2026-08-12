@@ -2,3 +2,9 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# public/ 은 C:\htmls\dbx-guide 로의 junction 이며, 그쪽 저장소가 이미 30초 주기
+# 자동 스냅샷으로 버전 관리한다. 여기서 같이 추적하면 같은 파일에 주인이 둘이 되고,
+# 브랜치 전환·stash·reset 이 junction 자체를 끊어버린다 (실제로 한 번 발생).
+# 배포는 영향 없음 — webpack CopyWebpackPlugin 이 빌드 시점에 public/ 을 dist/ 로 복사한다.
+public/

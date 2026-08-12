@@ -76,6 +76,16 @@ npm run preview    # dist/ 를 로컬에서 확인
 - 원본 쪽엔 git 자동 스냅샷(serve_guide.py, 30초)이 돌고 있다 — 되돌리기: `git -C C:\htmls log`
 - junction 재생성: `cmd /c mklink /J C:\projects\technote-front\public C:\htmls\dbx-guide`
 
+**`public/` 은 이 저장소에서 추적하지 않는다**(`.gitignore`). 파일의 주인은 `C:\htmls` 저장소다.
+같이 추적하면 같은 파일에 주인이 둘이 되는데, Git for Windows 는 junction 을 이해하지 못해
+`checkout` · `stash` · `reset --hard` 같은 명령이 **링크 자체를 끊고 일반 디렉토리로 갈아치운다.**
+실제로 한 번 발생했다. 그래서 이 저장소는 브랜치를 파지 않고 `master` 에 직접 커밋한다.
+
+링크가 끊겼는지 확인: `(Get-Item public -Force).LinkType` — 비어 있으면 끊긴 것.
+`npm run test` 도 이 상태를 잡는다.
+
+> 새 PC 에서 클론했다면 `public/` 이 없다. 위 `mklink` 를 먼저 실행해야 빌드가 된다.
+
 ## 기존 인프라와의 관계 (그대로 살아 있음)
 
 - `C:\htmls\serve_guide.py` (port 8777): 바탕화면 "Tech Note" 앱 바로가기가 쓰는 서버. 부팅 시 자동 시작
