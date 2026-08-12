@@ -11,12 +11,12 @@ model: sonnet
 ```
 app → pages → widgets → features → entities → shared
 ```
-- `app/`: 라우팅·전역 부트스트랩 (App.jsx, main.jsx)
+- `app/`: 라우팅·전역 부트스트랩 (App.tsx, main.tsx)
 - `pages/`: 라우트 단위 (HomePage/CategoryPage/DeckPage)
 - `widgets/`: 조립 블록 (DeckViewer)
 - `features/`: 기능 단위 (search/theme/notify/read-tracking)
-- `entities/docs/`: 문서 도메인 (registry.js + content/*.mdx)
-- `shared/`: 공용 (slide-kit.jsx, shell.css)
+- `entities/docs/`: 문서 도메인 (registry.ts + content/*.mdx)
+- `shared/`: 공용 (slide-kit.tsx, shell.css)
 
 ## 규칙
 - dev는 Vite(5173)/prod는 webpack — 설정 수정 시 **양쪽 다** 반영

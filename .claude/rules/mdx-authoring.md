@@ -1,6 +1,6 @@
 # 덱 HTML → MDX 변환 규약
 
-출력 위치: `C:\projects\technote\src\entities\docs\content\<cat>\<slug>.mdx`
+출력 위치: `src/entities/docs/content/<cat>/<slug>.mdx`
 
 ## 절대 원칙
 1. **내용(텍스트)은 한 글자도 바꾸지 않는다.** 요약·수정·재작성 금지.

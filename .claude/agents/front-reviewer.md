@@ -15,7 +15,7 @@ model: opus
 - [ ] 같은 층 간 직접 import 최소화
 
 ### 2. 문서 레지스트리 정합성
-- [ ] registry.js 항목의 `load` import 경로에 실제 mdx 파일 존재 (등록만 되고 파일 없으면 라우트 깨짐)
+- [ ] registry.ts 항목의 `load` import 경로에 실제 mdx 파일 존재 (등록만 되고 파일 없으면 라우트 깨짐)
 - [ ] cat/slug가 라우트·읽음추적 키와 일치
 - [ ] 검색 키워드(k), 세션 분류(session: work=DBX/concept=DB/verify=TEST/support=문의) 적절
 

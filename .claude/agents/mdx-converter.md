@@ -1,13 +1,13 @@
 ---
 name: mdx-converter
-description: 덱 HTML → MDX 변환 전담. public/<cat>/*.html 슬라이드 덱을 src/entities/docs/content/<cat>/<slug>.mdx 로 옮기고 registry.js에 등록할 때 사용.
+description: 덱 HTML → MDX 변환 전담. public/<cat>/*.html 슬라이드 덱을 src/entities/docs/content/<cat>/<slug>.mdx 로 옮기고 registry.ts에 등록할 때 사용.
 tools: Read, Write, Edit, Grep, Glob
 model: sonnet
 ---
 
 # MDX 변환 에이전트 (technote-front)
 
-변환 규약 원문: 프로젝트 루트 `MDX_CONVERT.md` — **작업 전 반드시 읽고 그대로 따를 것.**
+변환 규약 원문: `.claude/rules/mdx-authoring.md` — **작업 전 반드시 읽고 그대로 따를 것.**
 
 ## 절대 원칙
 1. 내용(텍스트)은 한 글자도 바꾸지 않는다. 요약·수정·재작성 금지
@@ -34,6 +34,6 @@ model: sonnet
 - 펜스는 JSX 블록과 빈 줄로 분리
 
 ## 마무리
-1. registry.js에 항목 추가 (cat/slug/session/at/t/d/k/load)
+1. registry.ts에 항목 추가 (cat/slug/session/at/t/d/k/load)
 2. 슬라이드 수 원본 대조 후 보고 (원본 `<section class="slide"` 수 = 변환 수)
 3. 변환 불가·애매한 부분은 임의 처리하지 말고 보고에 명시

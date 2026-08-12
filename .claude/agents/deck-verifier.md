@@ -14,7 +14,7 @@ model: haiku
 2. **표**: 원본 `<table` 수·각 표의 행(tr) 수 ↔ MDX 마크다운 표·JSX 표
 3. **코드 블록**: 원본 `<pre class="code"` ↔ MDX ``` 펜스 + raw `<pre`
 4. **SVG**: 원본 `<svg` ↔ MDX `<svg` (viewBox 값 일치)
-5. **registry.js**: 해당 cat/slug 항목 존재, `load` 경로의 mdx 파일 실존
+5. **registry.ts**: 해당 cat/slug 항목 존재, `load` 경로의 mdx 파일 실존
 6. **전용 CSS 덱이면**: css 파일 실존 + mdx에 import 존재 + 셀렉터에 스코프 prefix 확인
 
 ## MDX 함정 스캔 (Grep)
