@@ -126,6 +126,12 @@ export const DOCS: readonly Doc[] = [
     k: 'fsd feature sliced design 아키텍처 구조 층 레이어 layer slice 의존 방향 import features entities widgets shared 판단 기준 atomic design clean architecture hexagonal bulletproof react mvc 폴더 구조 단점 순환 참조',
     load: () => import('./content/react/fsd-architecture.mdx') },
 
+  { cat: 'db2', slug: 'calcdepth-edge-cases', session: 'work', at: '2026-08-12',
+    t: 'calcDepth 엣지케이스는 왜 생기나',
+    d: '가정 4개 × 데이터 파이프라인의 틈 3개 — 순환/중복/다중뎁스/고아가 흘러드는 경로와 무너지는 라인',
+    k: 'calcdepth 엣지케이스 원인 order by 없음 rank 필터 collectrow dag 공유 서브플랜 순환 자기참조 고아 행 밀림 stackoverflow explain_stream 5-key',
+    load: () => import('./content/db2/calcdepth-edge-cases.mdx') },
+
   { cat: 'db2', slug: 'calcdepth-parentmap', session: 'work', at: '2026-08-12',
     t: 'calcDepth — tree DFS vs parentMap',
     d: '다중 뎁스에서 depth가 운에 좌우되는 이유와 parent_id 정합 해법. 도식+라인바이라인',
