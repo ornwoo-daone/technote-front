@@ -8,10 +8,12 @@ DB & DBX 개념 지침서. React 19 + Node 22.
 technote/
 ├─ public/            ← ⚠️ junction → C:\htmls\dbx-guide (복사본 아님, 같은 실체)
 │                        기존 사이트 전체가 여기서 그대로 서빙된다
-├─ src/               FSD-lite 구조 (위층은 아래층만 import: app→pages→features→entities→shared)
-│  ├─ app/            엔트리·전역 설정 (main.jsx, App.jsx)
+├─ src/               FSD (Feature-Sliced Design) 6층
+│  │                  import 방향: app→pages→widgets→features→entities→shared (위층은 아래층만)
+│  ├─ app/            엔트리·전역 설정 (main.jsx, App.jsx, 프로바이더)
 │  ├─ pages/          라우트 단위 페이지 (조립만)
-│  ├─ features/       사용자 행동 단위 기능 (notify/ theme/ search/ …)
+│  ├─ widgets/        페이지를 구성하는 큰 UI 블록 (알림 패널, 카드 그리드, 덱 뷰어)
+│  ├─ features/       사용자 행동 단위 기능 (notify/ theme/ search/ read-tracking/ …)
 │  ├─ entities/       도메인 모델 (docs/ = 문서 레지스트리)
 │  └─ shared/         공용 최하층 (ui / lib=훅·유틸 / config / assets)
 ├─ index.html         Vite 진입점 (/ → /dbx-guide.html 리다이렉트)
