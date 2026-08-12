@@ -9,7 +9,8 @@ CLAUDE.md            ← 루트. 매 세션 자동 로드 + rules/ 를 @import
 │  ├─ registry.md        문서/카테고리 등록·타입 파생·localStorage 키 계약
 │  ├─ build.md           이중 빌드·public junction 경고
 │  ├─ conventions.md     한국어 표기·네이밍·커밋·접근성 최소선
-│  └─ mdx-authoring.md   덱 HTML→MDX 변환 규약 (분량이 커서 @import 하지 않음)
+│  ├─ mdx-authoring.md   덱 HTML→MDX 변환 규약 (분량이 커서 @import 하지 않음)
+│  └─ legacy-parity.md   레거시 vanilla JS ↔ React 이식 대조표 (@import 안 함)
 ├─ agents/           서브에이전트. 작업 위임 시 격리된 컨텍스트로 실행
 │  ├─ react-coder.md     기능 구현·수정
 │  ├─ front-reviewer.md  구조 변경 후 리뷰

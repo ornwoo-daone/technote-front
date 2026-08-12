@@ -39,9 +39,13 @@ MDX 는 dev `@mdx-js/rollup`, prod `@mdx-js/loader` 로 서로 다른 플러그�
 ## 레거시와 공존 중
 
 `C:\htmls\serve_guide.py` (port 8777) 가 바탕화면 "Tech Note" 앱이 쓰는 서버로 계속 살아 있다.
-`public/assets/` 의 vanilla 스크립트(`theme.js` `notify.js` `unread.js` `docs.js` `deck.js`)도
+`public/assets/` 의 vanilla 스크립트(`theme.js` `notify.js` `unread.js` `docs.js` `deck.js` `dbpage.js`)도
 그대로 동작한다. React 셸은 **같은 localStorage 키를 공유**하므로 키 계약을 깨지 않는다
 (→ [registry 규칙](registry.md) 마지막 절).
+
+⚠️ **`guide.css` 는 레거시와 React 가 공유한다.** 스타일은 있는데 그걸 만들던 vanilla JS 가
+이식되지 않으면 기능이 아무 에러 없이 사라진다. 이식 현황과 남은 누락은
+`.claude/rules/legacy-parity.md` 에 표로 관리한다 — 레거시 동작을 건드릴 때 먼저 볼 것.
 
 ## 테스트
 

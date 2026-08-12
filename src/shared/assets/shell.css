@@ -67,3 +67,9 @@ color:var(--muted);font-weight:700;margin:0 0 12px 4px;display:flex;align-items:
 width:60px;height:60px;border-radius:16px;font-family:var(--mono);font-size:22px;font-weight:700;
 color:var(--accent);border:1px solid var(--line);background:rgba(255,255,255,.05);
 text-shadow:0 0 12px color-mix(in srgb,var(--accent) 45%,transparent)}
+
+/* 테마 팝업: guide.css 의 고정 250px 로는 2열 그리드가 라벨('Interstellar')을 못 담아
+   스와치가 팝업 밖으로 삐져나온다. 열은 min-width:auto 라 내용보다 작아지지 못한다.
+   폰트 metric 에 의존하지 않도록 내용에 맞춰 늘어나게 한다 (좁은 화면은 max-width 로 방어). */
+.theme-pop{width:max-content;max-width:calc(100vw - 32px)}
+.tp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}

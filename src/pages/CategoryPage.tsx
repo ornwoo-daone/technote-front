@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CATS, sessionsOf, docsOf, docKey } from '../entities/docs/registry';
 import { useReadList } from '../features/read-tracking/useRead';
@@ -18,6 +18,27 @@ export default function CategoryPage() {
 
   const docs = docsOf(cat ?? '');
   const shown = docs.filter((d) => active === 'all' || d.session === active);
+
+  // 활성 탭을 따라다니는 슬라이딩 pill(.tab-slider). guide.css 에 스타일은 있는데
+  // 레거시에서는 dbpage.js 가 DOM 을 직접 만들어 붙였다 — React 이식 때 누락됐던 부분.
+  // useLayoutEffect 라 첫 페인트 전에 위치가 정해진다 → 0 에서 미끄러져 오는 깜빡임이 없다.
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<{ left: number; width: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = tabsRef.current?.querySelector<HTMLElement>('.tab.active');
+      setPill(el ? { left: el.offsetLeft, width: el.offsetWidth } : null);
+    };
+    measure();
+    // 폰트가 늦게 로드되면 탭 폭이 바뀐다 → load 시점에 한 번 더
+    window.addEventListener('resize', measure);
+    window.addEventListener('load', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('load', measure);
+    };
+  }, [active, cat, docs.length]);
 
   const countOf = (key: string): number =>
     key === 'all' ? docs.length : docs.filter((d) => d.session === key).length;
@@ -39,7 +60,11 @@ export default function CategoryPage() {
       {docs.length > 0 && (
         <>
           <SearchBox cat={cat} />
-          <div className="tabs">
+          <div className="tabs" ref={tabsRef}>
+            {pill && (
+              <span className="tab-slider"
+                style={{ width: pill.width, transform: `translateX(${pill.left}px)` }} />
+            )}
             {sessions.map((s) => (
               <button key={s.key}
                 className={'tab' + (active === s.key ? ' active' : '') + (unreadOf(s.key) > 0 ? ' has-unread' : '')}
