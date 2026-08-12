@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DB2 · DBX 지침서</title><link rel="icon" type="image/png" sizes="256x256" href="../assets/favicon.png"><link rel="icon" type="image/svg+xml" href="../assets/favicon.svg"><link rel="stylesheet" href="../assets/guide.css"><script>(function(){try{var p=localStorage.getItem("dbxPalette");if(p){var r=document.documentElement;r.setAttribute("data-theme","dark");if(p!=="random")r.setAttribute("data-palette",p);}}catch(e){}})();</script></head><body>
+<div class="wrap">
+<a class="back" href="../dbx-guide.html" aria-label="홈으로"></a>
+<h1>DB2</h1>
+<p class="lead">DB2 에이전트 기능·개념·검증된 이슈.</p>
+
+<div class="searchwrap">
+  <svg class="search-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+  <input id="q" class="bigsearch" type="text" autocomplete="off" spellcheck="false" placeholder="이 DB 안에서 검색">
+  <div id="results" class="results" hidden></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-filter="all">ALL<span class="tc">6</span></button>
+  <button class="tab" data-filter="work">DBX<span class="tc">4</span></button>
+  <button class="tab" data-filter="concept">DB<span class="tc">1</span></button>
+  <button class="tab" data-filter="verify">TEST<span class="tc">1</span></button>
+  <button class="tab" data-filter="support">Support<span class="tc">0</span></button>
+</div>
+
+<div class="toc">
+  <a class="toc-item new" data-session="work" href="db2-savingplan-design.html"><span class="newbadge">NEW</span><b>SavingPlan 구현 설계 · 데이터 플로우</b><span>Oracle 구조 대조 → 변경 파일 5개 → DB2 고유 난점 3가지</span><div class="toc-meta"><span class="deploy-tag pending">⏳ 미배포</span><span class="toc-date created">생성 2026-08-12</span><span class="toc-date">수정 2026-08-12</span></div></a>
+  <a class="toc-item new" data-session="concept" href="savingplan-prereq.html"><span class="newbadge">NEW</span><b>SavingPlan에 필요한 DB2 지식</b><span>section·package cache·EXPLAIN 프로시저의 쓰기 부작용·plan 해시 부재</span><div class="toc-meta"><span class="toc-date created">생성 2026-08-12</span><span class="toc-date">수정 2026-08-12</span></div></a>
+  <a class="toc-item new" data-session="work" href="plan.html"><span class="newbadge">NEW</span><b>Plan 수집 · depth · SavingPlan</b><span>executable_id → EXPLAIN_FROM_SECTION → 트리/depth → 서버. 설계 포함</span><div class="toc-meta"><span class="deploy-tag pending">⏳ 미배포</span><span class="toc-date created">생성 2026-08-11</span><span class="toc-date">수정 2026-08-11</span></div></a>
+  <a class="toc-item new" data-session="work" href="plan-refactor.html"><span class="newbadge">NEW</span><b>Plan 코드 리팩터 (공용화·스레드 안전)</b><span>3경로 중복 제거 + static 가변맵 제거로 스레드 안전 확보</span><div class="toc-meta"><span class="deploy-tag pending">⏳ 미배포</span><span class="toc-date created">생성 2026-08-11</span><span class="toc-date">수정 2026-08-11</span></div></a>
+  <a class="toc-item new" data-session="work" href="db2-plan-depth-deck.html"><span class="newbadge">NEW</span><b>Plan depth 슬라이드 덱</b><span>예제·도식·코드 단계별 (인터랙티브)</span><div class="toc-meta"><span class="deploy-tag live">✅ 배포 v2.63.04</span><span class="toc-date created">생성 2026-08-11</span><span class="toc-date">수정 2026-08-11</span></div></a>
+  <a class="toc-item new" data-session="verify" href="disk-retention.html"><span class="newbadge">NEW</span><b>Plan 저장 disk 누적 이슈 (실측)</b><span>이벤트모니터·EXPLAIN 테이블 자동삭제 없음, 가득 차면 중단</span><div class="toc-meta"><span class="toc-date created">생성 2026-08-11</span><span class="toc-date">수정 2026-08-11</span></div></a>
+</div>
+<div id="emptyState" class="session-empty" style="display:none">이 세션엔 아직 문서가 없습니다.</div>
+</div>
+<script src="../assets/dbpage.js"></script>
+<script src="../assets/docs.js"></script>
+<script src="../assets/notify.js"></script>
+<script src="../assets/theme.js"></script>
+</body></html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PostgreSQL SQL_ASCII 인코딩 깨짐 · DBX 지침서</title>
+<link rel="icon" type="image/png" sizes="256x256" href="../assets/favicon.png"><link rel="icon" type="image/svg+xml" href="../assets/favicon.svg"><link rel="stylesheet" href="../assets/guide.css"><script>(function(){try{var p=localStorage.getItem("dbxPalette");if(p){var r=document.documentElement;r.setAttribute("data-theme","dark");if(p!=="random")r.setAttribute("data-palette",p);}}catch(e){}})();</script></head><body>
+<a class="deck-back" href="index.html">← PostgreSQL</a>
+<div class="deck">
+
+  <section class="slide">
+    <div class="kick">PostgreSQL · 인코딩</div>
+    <h1>SQL_ASCII에서 한글이<br>조용히 깨지는 원리</h1>
+    <p class="lead"><code>SQL_ASCII</code>는 "인코딩을 모른다는 선언" — 검증도 변환도 안 하는 유일한 타입. 그래서 섞인 인코딩이 <b>에러 없이 통과</b>해 깨진다.</p>
+  </section>
+
+  <section class="slide">
+    <div class="kick">메커니즘 · 도식</div>
+    <h2>바이트는 그대로, 해석에서 깨진다</h2>
+    <svg class="dg" viewBox="0 0 720 250" role="img" aria-label="한글이 EUC-KR 바이트로 저장되고 UTF-8로 읽혀 깨지는 흐름">
+      <!-- step1 앱 -->
+      <rect class="dg-box" x="10" y="30" width="150" height="66" rx="10"/>
+      <text class="dg-t" x="85" y="55" text-anchor="middle">고객 앱</text>
+      <text class="dg-mono" x="85" y="78" text-anchor="middle" font-size="15">한 → C7 D1</text>
+      <text class="dg-tm" x="85" y="112" text-anchor="middle">EUC-KR 바이트 전송</text>
+      <path class="dg-line" d="M165 63 H205" marker-end=""/>
+      <polygon class="dg-arrow" points="205,58 217,63 205,68"/>
+      <!-- step2 SQL_ASCII -->
+      <rect class="dg-box acc" x="222" y="30" width="180" height="66" rx="10"/>
+      <text class="dg-t" x="312" y="55" text-anchor="middle">SQL_ASCII DB</text>
+      <text class="dg-mono" x="312" y="78" text-anchor="middle" font-size="15">C7 D1</text>
+      <text class="dg-tm" x="312" y="112" text-anchor="middle">검증·변환 X → raw 저장</text>
+      <path class="dg-line" d="M407 63 H447"/>
+      <polygon class="dg-arrow" points="447,58 459,63 447,68"/>
+      <!-- step3 에이전트 -->
+      <rect class="dg-box bad" x="464" y="30" width="246" height="66" rx="10"/>
+      <text class="dg-t" x="587" y="55" text-anchor="middle">에이전트 (UTF-8로 읽음)</text>
+      <text class="dg-mono dg-badf" x="587" y="78" text-anchor="middle" font-size="15">C7 D1 → �  (mojibake)</text>
+      <text class="dg-tm" x="587" y="112" text-anchor="middle">EUC-KR 바이트를 UTF-8로 오해</text>
+      <!-- bottom note -->
+      <rect class="dg-box good" x="120" y="150" width="480" height="66" rx="10"/>
+      <text class="dg-t dg-goodf" x="360" y="177" text-anchor="middle">저장된 바이트(C7 D1)는 멀쩡 — 깨지는 건 "읽는 쪽 해석"뿐</text>
+      <text class="dg-tm" x="360" y="200" text-anchor="middle">SQL_ASCII가 아무 변환도 안 해서 인코딩 불일치가 그대로 노출</text>
+    </svg>
+  </section>
+
+  <section class="slide">
+    <div class="kick">구분</div>
+    <h2>에러 나는 경우 vs 조용히 깨짐</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>케이스</th><th>결과</th></tr></thead>
+      <tbody>
+        <tr><td>선언 불일치 (EUC_KR 선언 + UTF-8 바이트)</td><td>DB가 입력 <b>거부(ERROR)</b>, 저장 안 됨</td></tr>
+        <tr><td>SQL_ASCII passthrough (EUC-KR 저장 + UTF-8 읽기)</td><td class="bad">에러 없이 조용히 깨짐</td></tr>
+      </tbody>
+    </table></div>
+    <ul class="bul">
+      <li>저장은 멀쩡, <b>읽는 시점 디코딩 불일치</b>로 깨짐 (에러 없어 발견 늦음)</li>
+      <li>UTF-8 DB였다면 무효 바이트를 <b>INSERT 단계에서 거부</b> → 애초에 안 들어감</li>
+      <li><code>set client_encoding</code>은 "서버의 해석 규칙"만 바꿈 — 실제 전송 바이트는 안 바뀜</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <div class="kick">일반화</div>
+    <h2>다른 DB의 유사 함정</h2>
+    <ul class="bul">
+      <li><b>Oracle</b>: 클라 NLS_LANG == DB charset이면 변환 생략(pass-through), 특히 US7ASCII</li>
+      <li><b>MySQL</b>: latin1이 전 바이트 수용 → 타 인코딩 유입 시 double-encoding</li>
+      <li><b>SQL Server</b>: VARCHAR 코드페이지 불일치</li>
+    </ul>
+    <div class="note">근본 원인 공통: DB가 "저장된 바이트의 실제 인코딩"을 강제·보장하지 않을 때, <b>저장 인코딩 ≠ 읽는 쪽 가정 인코딩</b> 불일치가 에러 없이 깨짐으로 드러남. SQL_ASCII는 그 무검증을 가장 노골적으로 하는 타입.</div>
+  </section>
+
+</div>
+<script src="../assets/deck.js"></script>
+<script>try{var k="dbxRecent",a=JSON.parse(localStorage.getItem(k)||"[]");var u=location.pathname.replace(/^.*\/dbx-guide\//,"");var t=(document.title.split("·")[0]||"문서").trim();a=a.filter(function(x){return x.u!==u});a.unshift({u:u,t:t});a=a.slice(0,8);localStorage.setItem(k,JSON.stringify(a));}catch(e){}</script>
+<script src="../assets/docs.js"></script>
+<script src="../assets/notify.js"></script>
+<script src="../assets/theme.js"></script>
+</body></html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tech Note · DB & DBX</title><link rel="icon" type="image/png" sizes="256x256" href="assets/favicon.png"><link rel="icon" type="image/svg+xml" href="assets/favicon.svg"><link rel="manifest" href="manifest.webmanifest"><link rel="stylesheet" href="assets/guide.css"></head><body>
+<script>(function(){try{var p=localStorage.getItem('dbxPalette');if(p){var r=document.documentElement;r.setAttribute('data-theme','dark');if(p!=='random')r.setAttribute('data-palette',p);}}catch(e){}})();</script>
+<button id="themeBtn" class="theme-btn" aria-label="테마 변경" title="테마 변경"><svg class="brush" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><defs><linearGradient id="rainbow" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ff5d5d"/><stop offset=".22" stop-color="#ffb84d"/><stop offset=".44" stop-color="#4dff88"/><stop offset=".64" stop-color="#4dd2ff"/><stop offset=".82" stop-color="#8a6bff"/><stop offset="1" stop-color="#ff6bd2"/></linearGradient></defs><path d="M17.6 3.1a2.3 2.3 0 0 1 3.3 3.3l-8.1 8.1-3.3-3.3 8.1-8.1Z"/><path d="M9.4 11.2c-2.2.3-3.9 1.4-4.6 3.6-.3 1-.5 2-1.3 2.7 1.2 1.3 3.1 1.6 4.7 1 2.2-.8 3.3-2.6 3.5-4.9"/></svg></button>
+<div id="themePop" class="theme-pop" hidden><div class="tp-head">테마 선택</div><div class="tp-grid" id="tpGrid"></div></div>
+<div class="home">
+  <div class="home-head"><div class="eyebrow">DATABASE · DBX</div><h1>TECH NOTE</h1></div>
+  <div class="searchwrap">
+    <svg class="search-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+    <input id="q" class="bigsearch" type="text" autocomplete="off" spellcheck="false" placeholder="개념·이슈 검색">
+    <div id="results" class="results" hidden></div>
+  </div>
+  <div class="hub-grid">
+    <a class="cat-btn new" href="db2/index.html"><span class="newbadge">6</span><span class="ic"><img class="ic-bloom" src="assets/icons/db2.png" alt="" aria-hidden="true"><img class="ci ci-img ci-big" src="assets/icons/db2.png" alt=""></span>DB2<small class="rdy">문서 6개</small></a>
+    <a class="cat-btn new" href="postgresql/index.html"><span class="newbadge">1</span><span class="ic"><img class="ic-bloom" src="assets/icons/postgresql.png" alt="" aria-hidden="true"><img class="ci ci-img" src="assets/icons/postgresql.png" alt=""></span>PostgreSQL<small class="rdy">문서 1개</small></a>
+    <a class="cat-btn new" href="sqlserver/index.html"><span class="newbadge">1</span><span class="ic"><img class="ic-bloom" src="assets/icons/sqlserver.png" alt="" aria-hidden="true"><img class="ci ci-img" src="assets/icons/sqlserver.png" alt=""></span>SQL Server<small class="rdy">문서 1개</small></a>
+    <a class="cat-btn new" href="aws/index.html"><span class="newbadge">1</span><span class="ic"><img class="ic-bloom" src="assets/icons/aws.png" alt="" aria-hidden="true"><img class="ci ci-img" src="assets/icons/aws.png" alt=""></span>AWS<small class="rdy">문서 1개</small></a>
+    <a class="cat-btn soon" href="oracle/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/oracle.png" alt="" aria-hidden="true"><img class="ci ci-img ci-big" src="assets/icons/oracle.png" alt=""></span>Oracle<small>준비 중</small></a>
+    <a class="cat-btn soon" href="mysql/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/mysql.png" alt="" aria-hidden="true"><img class="ci ci-img ci-mid" src="assets/icons/mysql.png" alt=""></span>MySQL<small>준비 중</small></a>
+    <a class="cat-btn soon" href="tibero/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/tibero.png" alt="" aria-hidden="true"><img class="ci ci-img ci-tib" src="assets/icons/tibero.png" alt=""></span>Tibero<small>준비 중</small></a>
+    <a class="cat-btn soon" href="cubrid/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/cubrid.png" alt="" aria-hidden="true"><img class="ci ci-img" src="assets/icons/cubrid.png" alt=""></span>CUBRID<small>준비 중</small></a>
+    <a class="cat-btn soon" href="mongo/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/mongo.svg" alt="" aria-hidden="true"><img class="ci ci-img" src="assets/icons/mongo.svg" alt=""></span>MongoDB<small>준비 중</small></a>
+    <a class="cat-btn soon" href="redis/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/redis.svg" alt="" aria-hidden="true"><img class="ci ci-img" src="assets/icons/redis.svg" alt=""></span>Redis<small>준비 중</small></a>
+    <a class="cat-btn soon" href="gcp/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/gcp.png" alt="" aria-hidden="true"><img class="ci ci-img ci-gcp" src="assets/icons/gcp.png" alt=""></span>Google Cloud Platform<small>준비 중</small></a>
+    <a class="cat-btn soon" href="ncp/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/ncp.png" alt="" aria-hidden="true"><img class="ci ci-img ci-ncp" src="assets/icons/ncp.png" alt=""></span>Naver Cloud Platform<small>준비 중</small></a>
+    <a class="cat-btn soon" href="singlestore/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/singlestore.png" alt="" aria-hidden="true"><img class="ci ci-img ci-ss" src="assets/icons/singlestore.png" alt=""></span>SingleStore<small>준비 중</small></a>
+    <a class="cat-btn soon" href="hana/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/hana.png" alt="" aria-hidden="true"><img class="ci ci-img ci-hana" src="assets/icons/hana.png" alt=""></span>SAP HANA<small>준비 중</small></a>
+    <a class="cat-btn soon" href="scailium/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/scailium.png" alt="" aria-hidden="true"><img class="ci ci-img ci-sca" src="assets/icons/scailium.png" alt=""></span>Scailium<small>준비 중</small></a>
+    <a class="cat-btn soon" href="dbx/index.html"><span class="ic"><img class="ic-bloom" src="assets/icons/whatap.png" alt="" aria-hidden="true"><img class="ci ci-img ci-wt" src="assets/icons/whatap.png" alt=""></span>DBX 공통<small>준비 중</small></a>
+  </div>
+  <div class="copyright">© 2026 <b>김동우</b> · All rights reserved.<br>본 지침서의 모든 내용에 대한 저작권은 작성자(김동우)에게 있으며, 무단 전재·복제·배포를 금합니다.</div>
+</div>
+<script>
+const INDEX=[{"t": "SavingPlan 구현 설계 · 데이터 플로우", "c": "DB2", "u": "db2/db2-savingplan-design.html", "k": "db2 savingplan 구현 설계 데이터 플로우 subcountcollector instancesub activesessionlist 큐 delete staging plan change 오탐 버전가드 configure db2_plan_saving"}, {"t": "SavingPlan에 필요한 DB2 지식", "c": "DB2", "u": "db2/savingplan-prereq.html", "k": "savingplan 개념 section executable_id package cache evict explain from section activity 5-key stream rank 권한 sysinstallobjects 버전"}, {"t": "Plan 수집 · depth · SavingPlan", "c": "DB2", "u": "db2/plan.html", "k": "plan 수집 executable_id explain from section depth tree parentmap savingplan"}, {"t": "Plan 저장 disk 누적 이슈 (실측)", "c": "DB2", "u": "db2/disk-retention.html", "k": "disk 누적 event monitor explain table pctdeactivate retention 자동삭제 sql1630"}, {"t": "Plan depth 슬라이드 덱", "c": "DB2", "u": "db2/db2-plan-depth-deck.html", "k": "depth 계산 tree parentmap calcdepth 예제 슬라이드 덱"}, {"t": "Plan 코드 리팩터 (공용화·스레드 안전)", "c": "DB2", "u": "db2/plan-refactor.html", "k": "refactor 리팩터 공용화 static thread safe collectrow plancontext 중복제거 -184"}, {"t": "인코딩 / SQL_ASCII 깨짐", "c": "PostgreSQL", "u": "postgresql/encoding-sqlascii.html", "k": "인코딩 encoding sql_ascii mojibake euckr utf8 깨짐 nls_lang latin1"}, {"t": "AlwaysOn · HADR 토폴로지 수집", "c": "SQL Server", "u": "sqlserver/alwayson.html", "k": "sqlserver mssql alwayson hadr topology 동기화 replica wait fci listener 역할변경"}, {"t": "AWS IAM 인증 (DocumentDB · ElastiCache)", "c": "AWS", "u": "aws/iam.html", "k": "aws iam 인증 documentdb elasticache mongodb-aws createawscredential 드라이버 lg 유플러스 보안 규정"}];
+const q=document.getElementById("q"),R=document.getElementById("results");let sel=-1,cur=[];
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function render(){
+  if(!cur.length){R.innerHTML="<div class=\"no-res\">결과 없음</div>";return;}
+  R.innerHTML=cur.map((x,i)=>`<a class="result-item${i===sel?" sel":""}" href="${x.u}"><b>${esc(x.t)}</b><span class="rc">${esc(x.c)}</span></a>`).join("");
+}
+function showRecent(){
+  var a=[];try{a=JSON.parse(localStorage.getItem("dbxRecent")||"[]")}catch(e){}
+  cur=a.map(function(x){return {t:x.t,c:"최근",u:x.u,k:""}});sel=-1;
+  if(!cur.length){R.hidden=true;R.innerHTML="";return;}
+  R.hidden=false;
+  R.innerHTML="<div class=\"res-head\">최근 열어본 문서</div>"+cur.map(function(x){return "<a class=\"result-item\" href=\""+x.u+"\"><b>"+esc(x.t)+"</b><span class=\"rc\">최근</span></a>"}).join("");
+}
+q.addEventListener("focus",function(){if(!q.value.trim())showRecent();});
+q.addEventListener("input",()=>{
+  const s=q.value.trim().toLowerCase();sel=-1;
+  if(!s){showRecent();return;}
+  cur=INDEX.filter(x=>(x.t+" "+x.c+" "+x.k).toLowerCase().includes(s)).slice(0,12);
+  R.hidden=false;render();
+});
+q.addEventListener("keydown",e=>{
+  if(R.hidden)return;
+  if(e.key==="ArrowDown"){e.preventDefault();sel=Math.min(sel+1,cur.length-1);render();}
+  else if(e.key==="ArrowUp"){e.preventDefault();sel=Math.max(sel-1,0);render();}
+  else if(e.key==="Enter"){const t=cur[sel<0?0:sel];if(t)location.href=t.u;}
+  else if(e.key==="Escape"){R.hidden=true;}
+});
+document.addEventListener("click",e=>{if(!e.target.closest(".searchwrap"))R.hidden=true;});
+const EX=["depth 계산","sql_ascii 깨짐","disk 누적 이슈","iam 인증","alwayson hadr","pctdeactivate","plan 리팩터","executable_id"];
+let _e=0,_c=0,_del=false;
+function _tw(){
+  if(document.activeElement===q||q.value){q.placeholder="개념·이슈 검색";setTimeout(_tw,1000);return;}
+  const wd=EX[_e];
+  if(!_del){_c++;q.placeholder=wd.slice(0,_c)+"\u2502";if(_c>=wd.length){_del=true;setTimeout(_tw,1200);return;}setTimeout(_tw,95);}
+  else{_c--;q.placeholder=wd.slice(0,_c)+"\u2502";if(_c<=0){_del=false;_e=(_e+1)%EX.length;setTimeout(_tw,420);return;}setTimeout(_tw,45);}
+}
+_tw();
+</script>
+<script src="assets/docs.js"></script>
+<script src="assets/unread.js"></script>
+<script src="assets/notify.js"></script>
+<script src="assets/theme.js"></script>
+</body></html>

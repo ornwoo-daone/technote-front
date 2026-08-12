@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DB2 Plan 수집 · depth · SavingPlan · DBX 지침서</title>
+<link rel="icon" type="image/png" sizes="256x256" href="../assets/favicon.png"><link rel="icon" type="image/svg+xml" href="../assets/favicon.svg"><link rel="stylesheet" href="../assets/guide.css"><script>(function(){try{var p=localStorage.getItem("dbxPalette");if(p){var r=document.documentElement;r.setAttribute("data-theme","dark");if(p!=="random")r.setAttribute("data-palette",p);}}catch(e){}})();</script></head><body>
+<a class="deck-back" href="index.html">← DB2</a>
+<div class="deck">
+
+  <section class="slide">
+    <div class="kick">DB2 · Plan 수집</div>
+    <h1>DB2 Plan은 어떻게 수집되나</h1>
+    <p class="lead">실행된 SQL의 컴파일된 plan(section)은 <b>package cache(메모리)</b>에 있고, 그걸 가리키는 <b>executable_id</b>로 꺼내 트리로 만들어 서버에 보낸다.</p>
+  </section>
+
+  <section class="slide">
+    <div class="kick">파이프라인</div>
+    <h2>executable_id → 트리 → 서버</h2>
+    <div class="flow">
+      <div class="fb"><b>executable_id</b><span>활성세션에서 획득 (MON_GET_ACTIVITY / PKG_CACHE_STMT)</span></div>
+      <div class="fa">→</div>
+      <div class="fb"><b>EXPLAIN_FROM_SECTION</b><span>캐시 섹션을 EXPLAIN_* 테이블에 "펼침"</span></div>
+      <div class="fa">→</div>
+      <div class="fb"><b>3-way JOIN SELECT</b><span>STATEMENT+OPERATOR+STREAM</span></div>
+      <div class="fa">→</div>
+      <div class="fb acc"><b>tree→depth→전송</b><span>calcDepth → 서버</span></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">조회 방법</div>
+    <h2>plan 조회 4가지 (소스별)</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>소스</th><th>방법</th><th>키</th><th>재최적화</th><th>부하</th></tr></thead>
+      <tbody>
+        <tr><td>package cache (메모리)</td><td><code>EXPLAIN_FROM_SECTION</code></td><td><b>executable_id</b></td><td>❌</td><td class="good">낮음</td></tr>
+        <tr><td>catalog (정적, disk)</td><td><code>EXPLAIN_FROM_CATALOG</code></td><td>패키지 좌표</td><td>❌</td><td class="good">낮음</td></tr>
+        <tr><td>event monitor</td><td><code>EXPLAIN_FROM_ACTIVITY</code></td><td>appl/uow/act</td><td>❌</td><td class="warn">캡처 부하</td></tr>
+        <tr><td>SQL 텍스트</td><td><code>EXPLAIN PLAN ... FOR</code></td><td>SQL 텍스트</td><td>✅ 풀</td><td class="bad">높음</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">section explain은 이미 쓰인 plan을 디컴파일이라 가벼움. SQL 텍스트 재-explain이 가장 무겁다.</p>
+  </section>
+
+  <section class="slide">
+    <div class="kick">코드</div>
+    <h2>3경로 + 공용 코어 (Db2Helper)</h2>
+    <pre class="code">plan(db, sql, user, pwd)          <span class="cm">// SQL 텍스트 → EXPLAIN PLAN</span>
+planCached(executableId)          <span class="cm">// 캐시 → EXPLAIN_FROM_SECTION</span>
+planFromActivity(appl,uow,act)    <span class="cm">// 이벤트모니터 → EXPLAIN_FROM_ACTIVITY</span>
+<span class="cm">// 3경로 공용 코어 (commit df31e9d8c)</span>
+collectRow(rs, ctx)               <span class="cm">// 한 행 적재</span>
+calcDepth(tree, 1, 0, depthMap)   <span class="cm">// 트리 깊이 계산</span>
+populatePlanLists(L, ctx)         <span class="cm">// 9개 배열로 출력</span></pre>
+  </section>
+
+  <section class="slide">
+    <div class="kick">depth</div>
+    <h2>depth 계산 요약</h2>
+    <svg class="dg" viewBox="0 0 380 190" role="img" aria-label="노드1 밑에 2, 2 밑에 3과 4가 달린 트리, depth 0/1/2">
+      <line class="dg-line" x1="190" y1="44" x2="190" y2="78"/>
+      <line class="dg-line" x1="190" y1="100" x2="110" y2="136"/>
+      <line class="dg-line" x1="190" y1="100" x2="270" y2="136"/>
+      <circle class="dg-node" cx="190" cy="28" r="17"/><text class="dg-nt" x="190" y="33">1</text>
+      <circle class="dg-node" cx="190" cy="90" r="17"/><text class="dg-nt" x="190" y="95">2</text>
+      <circle class="dg-node leaf" cx="110" cy="152" r="17"/><text class="dg-nt" x="110" y="157">3</text>
+      <circle class="dg-node leaf" cx="270" cy="152" r="17"/><text class="dg-nt" x="270" y="157">4</text>
+      <text class="dg-tm" x="214" y="33">depth 0</text>
+      <text class="dg-tm" x="214" y="95">depth 1 (부모+1)</text>
+      <text class="dg-tm" x="134" y="157">depth 2</text>
+      <text class="dg-tm" x="294" y="157">depth 2</text>
+    </svg>
+    <ul class="bul">
+      <li>DB2 EXPLAIN엔 <b>depth 컬럼이 없어</b> stream(엣지)으로 트리를 만든 뒤 계산</li>
+      <li><b>tree</b>(부모→자식들)=depth 계산용, <b>parentMap</b>(자식→부모)=parent_id 채우기용</li>
+      <li><b>calcDepth</b>: 루트 1=0, 자식마다 +1 (재귀)</li>
+      <li><b>parent_id vs depth</b>: parent_id=원본 복사(연결), depth=계산(높이) — 다른 값</li>
+    </ul>
+    <div class="note">예제·도식·코드 단계별 → <a href="db2-plan-depth-deck.html">Plan depth 슬라이드 덱</a></div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">설계</div>
+    <h2>SavingPlan (구상)</h2>
+    <div class="flow">
+      <div class="fb"><b>Db2ActiveSessionList</b><span>executable_id 수집 → 큐</span></div>
+      <div class="fa">→</div>
+      <div class="fb"><b>Db2SavingPlan (주기)</b><span>FROM_SECTION → 공용 코어 → TagCountPack</span></div>
+      <div class="fa">→</div>
+      <div class="fb acc"><b>와탭 서버</b><span>db_db2_plan_save</span></div>
+    </div>
+    <ul class="bul">
+      <li>기본 <code>FROM_SECTION</code>(캐시, 무누적) / evict 필수 시만 FROM_ACTIVITY</li>
+      <li>EXPLAIN_* 테이블 <b>읽고 즉시 DELETE</b> (→ <a href="disk-retention.html">disk 누적</a>)</li>
+      <li>Oracle은 v$sql_plan에 depth 있어 계산 안 함 / DB2는 calcDepth 필수</li>
+    </ul>
+  </section>
+
+</div>
+<script src="../assets/deck.js"></script>
+<script>try{var k="dbxRecent",a=JSON.parse(localStorage.getItem(k)||"[]");var u=location.pathname.replace(/^.*\/dbx-guide\//,"");var t=(document.title.split("·")[0]||"문서").trim();a=a.filter(function(x){return x.u!==u});a.unshift({u:u,t:t});a=a.slice(0,8);localStorage.setItem(k,JSON.stringify(a));}catch(e){}</script>
+<script src="../assets/docs.js"></script>
+<script src="../assets/notify.js"></script>
+<script src="../assets/theme.js"></script>
+</body></html>

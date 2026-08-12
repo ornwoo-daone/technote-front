@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DB2 SavingPlan 구현 설계 · 데이터 플로우</title>
+<link rel="icon" type="image/png" sizes="256x256" href="../assets/favicon.png">
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<link rel="stylesheet" href="../assets/guide.css"><script>(function(){try{var p=localStorage.getItem("dbxPalette");if(p){var r=document.documentElement;r.setAttribute("data-theme","dark");if(p!=="random")r.setAttribute("data-palette",p);}}catch(e){}})();</script></head><body>
+<a class="deck-back" href="index.html">← DB2</a>
+<div class="deck">
+
+<section class="slide">
+  <div class="kick">DBX · 구현 설계</div>
+  <h1>DB2 SavingPlan<br>코드 변경 &amp; 데이터 플로우</h1>
+  <p class="lead">Oracle·Tibero에는 있는 <b>주기적 Plan 저장</b>이 DB2에는 없다.
+  무엇을 어디에 넣어야 하는지, 데이터가 어떤 경로로 흐르는지 정리한다.</p>
+  <p class="muted">기준 브랜치 <code>feature/db2-cachedplan</code> · 공용 코어 리팩터 <code>df31e9d8c</code> 반영</p>
+</section>
+
+<section class="slide">
+  <div class="kick">현재 상태</div>
+  <h2>DB2만 주기 수집이 없다</h2>
+  <div class="tscroll"><table>
+    <thead><tr><th></th><th>Oracle</th><th>Tibero</th><th>DB2</th></tr></thead>
+    <tbody>
+      <tr><td>주기 Plan 저장 Task</td><td class="good">OraSavingPlan</td><td class="good">TibSavingPlan</td><td class="bad">없음</td></tr>
+      <tr><td>Plan 변경 감지</td><td class="good">db_oracle_plan_change</td><td class="good">db_tibero_plan_change</td><td class="bad">없음</td></tr>
+      <tr><td>On-demand Plan</td><td>있음</td><td>있음</td><td class="good">plan / planCached / planFromActivity</td></tr>
+      <tr><td>config 키</td><td><code>ora_plan_saving</code>=true</td><td><code>tib_plan_saving</code>=false</td><td class="bad"><code>db2_opt</code> 하나뿐</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">DB2는 <b>on-demand(사용자가 UI에서 누를 때)</b> 만 있다. 지나간 SQL의 plan은 남지 않는다.</div>
+</section>
+
+<section class="slide">
+  <div class="kick">참조 모델</div>
+  <h2>Oracle 데이터 플로우</h2>
+  <div class="flow">
+    <div class="fb"><b>OraActiveSessionList</b><span>5초 주기. 세션 훑으며 <b>대상 선정</b></span></div>
+    <div class="fa">→</div>
+    <div class="fb acc"><b>savingPlanList</b><span>synchronizedList 큐</span></div>
+    <div class="fa">→</div>
+    <div class="fb"><b>OraSavingPlan</b><span>SubCountCollector. 큐를 drain</span></div>
+    <div class="fa">→</div>
+    <div class="fb"><b>v$sql_plan</b><span>메모리에서 SELECT</span></div>
+    <div class="fa">→</div>
+    <div class="fb acc"><b>TagCountPack</b><span>db_oracle_plan_save</span></div>
+  </div>
+  <div class="warn-box"><b>핵심:</b> SavingPlan 클래스는 <b>대상을 고르지 않는다</b>. 큐를 비우고 조회·전송만 한다.
+  실제 판단 로직은 전부 ActiveSessionList 안에 있다.</div>
+</section>
+
+<section class="slide">
+  <div class="kick">참조 모델</div>
+  <h2>대상 선정은 ActiveSessionList가 한다</h2>
+  <pre class="code"><span class="cm">// OraActiveSessionList.java:1636</span>
+if ((!username.equals("SYS")) &amp;&amp; sql_hash_value != 0 &amp;&amp; plan_hash_value != 0) {
+    if (lastCallEt &gt;= 5) {                    <span class="cm">// 5초 이상 실행중인 세션만</span>
+        long savingMapValue = (long)sql_child_number &lt;&lt; 32 | plan_hash_value;
+        if (!savingPlanCheck.containsKey(savingMapValue) &amp;&amp; savingPlan) {
+            savingPlanCheck.put(savingMapValue, 0);   <span class="cm">// 중복 방지</span>
+            savingPlanList.add(sp);                   <span class="cm">// 큐에 적재</span>
+        }
+    }
+}</pre>
+  <ul class="bul">
+    <li><b>필터</b> — SYS 계정 제외 + <code>lastCallEt &gt;= 5</code>(5초 이상 실행)</li>
+    <li><b>중복 방지</b> — <code>savingPlanCheck</code> HashMap, 하루 1회 clear</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <div class="kick">참조 모델</div>
+  <h2>Plan 변경 감지도 같은 자리</h2>
+  <pre class="code"><span class="cm">// OraActiveSessionList.java:1656 — 별도 클래스 없음. 인라인.</span>
+long planChangeKey = ((long)sql_child_number &lt;&lt; 32) | sql_hash_value;
+Long prev = planChangeCheckMap.get(planChangeKey);          <span class="cm">// ExpiringMap 8h</span>
+if (prev != null &amp;&amp; prev != plan_hash_value) {
+    tc.category = "db_oracle_plan_change";
+    tc.put("before_plan_hash_value", prev);
+    tc.put("after_plan_hash_value", plan_hash_value);
+    DataPackSender.send(tc);
+    <span class="cm">// 변경 전 plan / 변경 후 plan 을 둘 다 savingPlanList 에 넣는다</span>
+}
+planChangeCheckMap.put(planChangeKey, plan_hash_value);</pre>
+  <div class="note">키는 <b>SQL</b>(<code>child_number|sql_hash_value</code>), 값은 <b>plan</b>(<code>plan_hash_value</code>).
+  “같은 SQL인데 plan이 달라졌다”를 이 두 개의 분리로 판단한다.</div>
+</section>
+
+<section class="slide">
+  <div class="kick">목표</div>
+  <h2>DB2 데이터 플로우 (신규)</h2>
+  <div class="flow">
+    <div class="fb"><b>Db2ActiveSessionList</b><span>MON_GET_ACTIVITY. <b>executable_id</b> 이미 수집중</span></div>
+    <div class="fa">→</div>
+    <div class="fb acc"><b>savingPlanList</b><span>신규 큐</span></div>
+    <div class="fa">→</div>
+    <div class="fb acc"><b>Db2SavingPlan</b><span>신규 클래스 · SubCountCollector</span></div>
+  </div>
+  <div class="flow">
+    <div class="fb"><b>EXPLAIN_FROM_SECTION</b><span>package cache 섹션 → EXPLAIN 테이블에 <b>write</b></span></div>
+    <div class="fa">→</div>
+    <div class="fb"><b>EXPLAIN_* SELECT</b><span>5-key 3-way join → 트리/depth</span></div>
+    <div class="fa">→</div>
+    <div class="fb bad" style="border-color:var(--bad);background:var(--bad-soft)"><b>DELETE</b><span>staging 즉시 정리 <b>(DB2 전용)</b></span></div>
+    <div class="fa">→</div>
+    <div class="fb acc"><b>TagCountPack</b><span>db_db2_plan_save</span></div>
+  </div>
+  <div class="warn-box">Oracle은 뷰를 <b>읽기만</b> 한다. DB2는 EXPLAIN 프로시저가 고객 DB에 <b>행을 쓴다</b> → 정리 단계가 추가로 필요.</div>
+</section>
+
+<section class="slide">
+  <div class="kick">변경 범위</div>
+  <h2>손대야 하는 파일 5개</h2>
+  <div class="tscroll"><table>
+    <thead><tr><th>파일</th><th>변경</th><th>규모</th></tr></thead>
+    <tbody>
+      <tr><td><code>Configure.java</code></td><td><code>db2_plan_saving</code> 등 키 신설</td><td>소</td></tr>
+      <tr><td><code>Db2ActiveSessionList.java</code></td><td><b>대상 선정 + 큐 + 변경감지</b></td><td class="warn">대</td></tr>
+      <tr><td><code>Db2SavingPlan.java</code> <span class="good">(신규)</span></td><td>큐 drain → 조회 → 전송</td><td>중</td></tr>
+      <tr><td><code>Db2Helper.java</code></td><td>PlanLists 반환 진입점 + <b>DELETE</b></td><td>중</td></tr>
+      <tr><td><code>CountCollector.java</code></td><td><code>instanceSub</code> 에 등록</td><td>소</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">무게 중심이 신규 클래스가 아니라 <b>Db2ActiveSessionList</b> 에 있다는 점이 Oracle과 동일하다.</div>
+</section>
+
+<section class="slide">
+  <div class="kick">변경 ①</div>
+  <h2>Configure — 키 신설</h2>
+  <pre class="code"><span class="cm">// 현재 db2 관련 키는 db2_opt 하나가 전부 (Configure.java:447)</span>
+public int db2_opt = 0;
+
+<span class="cm">// 추가 제안</span>
+public boolean db2_plan_saving  = false;  <span class="cm">// Tibero 처럼 기본 off 로 시작</span>
+public String  db2_plan_evmon   = "WHATAP_ACT";  <span class="cm">// 하드코딩 제거</span>
+public int     db2_plan_min_et  = 5;      <span class="cm">// 대상 최소 실행시간(초)</span></pre>
+  <ul class="bul">
+    <li>기본값 <b>false</b> — 고객 DB에 EXPLAIN 부하/쓰기가 생기므로 Oracle(true)이 아니라 Tibero(false) 쪽을 따르는 게 안전</li>
+    <li><code>ACTIVITY_EVMON_NAME</code> 은 지금 <code>Db2Helper.java:328</code> 에 하드코딩 — 설정으로 빼야 함</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <div class="kick">변경 ②</div>
+  <h2>Db2ActiveSessionList — 큐 적재</h2>
+  <pre class="code"><span class="cm">// 재료는 이미 다 있다 (11.x 쿼리 :114)</span>
+a.UOW_ID, a.ACTIVITY_ID, a.EXECUTABLE_ID   <span class="cm">// + a.appl_id (:86)</span>
+
+<span class="cm">// 읽는 자리도 이미 있다 (:971)</span>
+long uowId       = rs.getLong("UOW_ID");
+long activityId  = rs.getLong("ACTIVITY_ID");
+executableId     = rs.getString("EXECUTABLE_ID");
+
+<span class="cm">// 여기에 추가 —</span>
+if (savingPlan &amp;&amp; executableId != null &amp;&amp; !executableId.isEmpty()) {
+    if (elapsed &gt;= conf.db2_plan_min_et &amp;&amp; !savingPlanCheck.containsKey(executableId)) {
+        savingPlanCheck.put(executableId, 0);
+        savingPlanList.add(new SavingPlan(executableId, applId, uowId, activityId));
+    }
+}</pre>
+  <div class="warn-box">단, 이 컬럼들은 <b>11.x 쿼리에만</b> 있고 pack 적재도 <code>(10.5+ || 11+)</code> 가드 안이다 → SavingPlan도 같은 가드 필요.</div>
+</section>
+
+<section class="slide">
+  <div class="kick">변경 ③</div>
+  <h2>Db2SavingPlan — 신규 클래스</h2>
+  <pre class="code">public class Db2SavingPlan implements IDBTask {
+    public void init() { }                <span class="cm">// reset 전용. 초기화는 생성자에서</span>
+
+    public void process(long t) {
+        for (SavingPlan sp : drain(Db2ActiveSessionList.savingPlanList)) {
+            PlanLists L = Db2Helper.planForSaving(sp.executableId);   <span class="cm">// 신규 진입점</span>
+            if (L == null || L.id.size() == 0) continue;              <span class="cm">// 빈 결과는 전송 안 함</span>
+
+            TagCountPack tc = new TagCountPack();   <span class="cm">// 1 row = 1 pack</span>
+            tc.time = t;
+            tc.category = "db_db2_plan_save";
+            tc.putTag("oname", DbInfo.oname);
+            tc.putTag("_no_5m_hour_", 0);
+            tc.put("executable_id", sp.executableId);
+            tc.put("id", L.id);  tc.put("parent_id", L.parent_id);  tc.put("depth", L.depth);
+            tc.put("operator_type", L.operator_type);
+            tc.put("cardinality", L.cardinality);  tc.put("total_cost", L.total_cost);
+            tc.put("object_schema", L.object_schema);  tc.put("object_name", L.object_name);
+            tc.put("source_type", L.source_type);
+            DataPackSender.send(tc);
+        }
+    }
+}</pre>
+</section>
+
+<section class="slide">
+  <div class="kick">변경 ④</div>
+  <h2>Db2Helper — 진입점 + 정리</h2>
+  <p class="lead"><code>df31e9d8c</code> 로 이미 공용 코어가 있다. 새로 만들 게 거의 없다.</p>
+  <pre class="code"><span class="cm">// 이미 3경로가 공유하는 코어</span>
+callExplainFromSection() → fetchPlanRows() → collectRow() → populatePlanLists()
+
+<span class="cm">// planCached 는 MapValue 를 돌려준다 (ControlHandler 응답용)</span>
+<span class="cm">// SavingPlan 은 ListValue 묶음(PlanLists)이 필요 → 내부 메서드 하나만 노출</span>
+public static PlanLists planForSaving(String executableId) {
+    ...  ExplainKey key = callExplainFromSection(conn, executableId);
+         fetchPlanRows(conn, key, ctx);
+         populatePlanLists(L, ctx);
+         deleteExplainRows(conn, key);          <span class="cm">// ★ 신규</span>
+}</pre>
+  <div class="note"><code>planCached()</code> 를 <code>planForSaving()</code> 위에 얹으면 on-demand 경로도 DELETE 혜택을 같이 받는다.</div>
+</section>
+
+<section class="slide">
+  <div class="kick">변경 ⑤</div>
+  <h2>CountCollector — 등록 위치</h2>
+  <pre class="code"><span class="cm">// CountCollector.java:338 — Oracle 은 tasks 가 아니라 instanceSub 에 들어간다</span>
+if (conf.ora_plan_saving)
+    instanceSub.tasks.add(new OraSavingPlan());
+
+<span class="cm">// DB2 는 instanceSub 에 등록된 게 지금 하나도 없다</span>
+if (conf.db2_plan_saving)
+    instanceSub.tasks.add(new Db2SavingPlan());</pre>
+  <div class="tscroll"><table>
+    <thead><tr><th>Collector</th><th>인터페이스</th><th>주기</th><th>여기 들어가나</th></tr></thead>
+    <tbody>
+      <tr><td>CountCollector</td><td>IDBCounterTask</td><td>~5s</td><td>아니오</td></tr>
+      <tr><td>CountCollectorSlow</td><td>IDBCounterTask</td><td>느린 주기</td><td>아니오</td></tr>
+      <tr><td class="good">SubCountCollector</td><td class="good">IDBTask</td><td>_counter_interval (min 5s)</td><td class="good">예</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="slide">
+  <div class="kick">DB2 난점 ①</div>
+  <h2>EXPLAIN staging을 반드시 지워야 한다</h2>
+  <div class="warn-box"><b>실측(4.77, 2026-08-11):</b> 같은 SQL을 2번 EXPLAIN →
+  EXPLAIN_STATEMENT 2→4행, EXPLAIN_OPERATOR 27→51행. <b>dedup도 덮어쓰기도 자동삭제도 없다.</b></div>
+  <ul class="bul">
+    <li>현재 <code>Db2Helper</code> 전체에 <b>DELETE가 0건</b> — on-demand라 빈도가 낮아 지금은 버티는 것</li>
+    <li>주기 수집으로 바꾸면 <b>수집 주기 × 세션 수</b> 만큼 고객 DB에 행이 쌓인다</li>
+    <li>가득 차면 삭제가 아니라 <b>수집 중단</b>(PCTDEACTIVATE / SQL1630N) → 조용히 망가진다</li>
+  </ul>
+  <p class="muted">→ 읽은 직후 <code>EXPLAIN_TIME</code> 5-key 스코프로 STATEMENT / OPERATOR / STREAM DELETE. 보관은 와탭 서버가 한다.</p>
+</section>
+
+<section class="slide">
+  <div class="kick">DB2 난점 ②</div>
+  <h2>plan_hash_value 에 해당하는 게 없다</h2>
+  <div class="tscroll"><table>
+    <thead><tr><th></th><th>SQL 식별</th><th>Plan 식별</th><th>변경 판단</th></tr></thead>
+    <tbody>
+      <tr><td>Oracle</td><td>sql_hash_value + child</td><td class="good">plan_hash_value</td><td class="good">둘이 분리 → 정확</td></tr>
+      <tr><td>DB2</td><td>?</td><td class="bad">없음</td><td class="bad">불확실</td></tr>
+    </tbody>
+  </table></div>
+  <ul class="bul">
+    <li><code>executable_id</code> 는 <b>섹션 식별자</b>지 plan 해시가 아니다</li>
+    <li>재컴파일로 plan이 바뀌면 executable_id도 바뀌지만, <b>역은 보장되지 않는다</b> (캐시 evict 후 재적재 등)</li>
+    <li>→ executable_id 변경만으로 <code>db_db2_plan_change</code> 를 쏘면 <b>오탐</b> 위험</li>
+  </ul>
+  <div class="note"><b>미결정.</b> 1단계는 plan_save만, plan_change는 판단 근거를 따로 확보한 뒤 분리 진행하는 것을 권장.</div>
+</section>
+
+<section class="slide">
+  <div class="kick">DB2 난점 ③</div>
+  <h2>버전 가드 — 10.5 미만은 불가</h2>
+  <pre class="code"><span class="cm">// Db2ActiveSessionList.java:1127</span>
+if ((versionMajor &gt;= 10 &amp;&amp; versionMinor &gt;= 5) || versionMajor &gt;= 11) {
+    tc.put("uow_id", tc_uow_id);
+    tc.put("activity_id", tc_activity_id);
+    tc.put("executable_id", tc_executable_id);
+}</pre>
+  <ul class="bul">
+    <li><code>EXECUTABLE_ID</code> 는 <b>11.x 쿼리에만</b> select 되어 있다 — 10.1 / 9.7 쿼리에는 없음</li>
+    <li>SavingPlan은 같은 가드를 걸고, 미만 버전에서는 <b>Task 자체를 등록하지 않는</b> 편이 낫다</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <div class="kick">주의</div>
+  <h2>Oracle에서 복사하면 안 되는 것</h2>
+  <div class="tscroll"><table>
+    <thead><tr><th>위치</th><th>문제</th></tr></thead>
+    <tbody>
+      <tr><td><code>OraSavingPlan:25</code></td><td><code>savingPlanParam</code> 이 <b>static</b> 인데 클래스는 인스턴스별 — 공유 상태</td></tr>
+      <tr><td><code>OraSavingPlan:132</code></td><td><code>sp_count</code> 를 조회 <b>전에</b> 증가 → 결과가 비어도 빈 pack 전송</td></tr>
+      <tr><td><code>OraSavingPlan:105,160</code></td><td><code>con_nameLv</code> 수집만 하고 pack에 안 넣음 — 죽은 코드</td></tr>
+      <tr><td><code>OraActiveSessionList:1676</code></td><td><code>Map&lt;Long,Integer&gt;</code> 에 <b>null 값</b> put (containsKey 조회라 우연히 안전)</td></tr>
+      <tr><td><code>TibSavingPlan:33-47</code></td><td>쓰이지 않는 plan-change 잔재 필드 다수</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">구조는 Oracle을 따르되 <b>이 5가지는 옮기지 않는다.</b></div>
+</section>
+
+<section class="slide">
+  <div class="kick">정리</div>
+  <h2>진행 순서 &amp; 미결정</h2>
+  <ul class="bul">
+    <li><b>1단계</b> — Db2Helper 에 DELETE 추가 (지금 있는 누적 버그부터 해소, SavingPlan과 무관하게 이득)</li>
+    <li><b>2단계</b> — Configure 키 + Db2SavingPlan + CountCollector 등록 (plan_save 만)</li>
+    <li><b>3단계</b> — Db2ActiveSessionList 대상 선정·큐 적재</li>
+    <li><b>4단계</b> — plan_change 는 판단 근거 확보 후 별도</li>
+  </ul>
+  <div class="warn-box"><b>사용자 결정 필요</b>
+    <br>① 대상 선정 기준 — Active Session 기반(Oracle 동일) / Top SQL(PKG_CACHE) 기반 / 둘 다
+    <br>② staging 정리 방식 — 읽은 직후 DELETE / 주기 일괄 DELETE
+    <br>③ plan_change 를 1차에 포함할지</div>
+</section>
+
+</div>
+<script src="../assets/deck.js"></script>
+<script src="../assets/docs.js"></script>
+<script src="../assets/notify.js"></script>
+<script src="../assets/theme.js"></script>
+</body></html>

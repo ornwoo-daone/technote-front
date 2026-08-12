@@ -1,0 +1,27 @@
+{
+  "name": "technote",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tech Note (DB & DBX) — React 19 + Node 22, dev: Vite / prod: webpack",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "webpack --mode production",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@babel/core": "^8.0.1",
+    "@babel/preset-react": "^8.0.1",
+    "@vitejs/plugin-react": "^6.0.5",
+    "babel-loader": "^10.1.1",
+    "copy-webpack-plugin": "^14.0.0",
+    "html-webpack-plugin": "^5.6.8",
+    "vite": "^8.2.1",
+    "webpack": "^5.109.2",
+    "webpack-cli": "^7.2.2"
+  }
+}

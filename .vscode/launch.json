@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Vite dev (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173/dbx-guide.html",
+      "webRoot": "${workspaceFolder}"
+    }
+  ]
+}
