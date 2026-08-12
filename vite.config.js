@@ -11,4 +11,9 @@ export default defineConfig({
     port: 5173,
     open: '/',
   },
+  test: {
+    // localStorage 를 쓰는 read-tracking 테스트 때문에 jsdom 이 필요하다
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts'],
+  },
 });
