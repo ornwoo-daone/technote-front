@@ -20,7 +20,8 @@
 
 - 한 행 = 간선 하나: "source가 만든 데이터를 target이 받는다"
 - 행 2·4가 둘 다 target=2 → **조인 노드** (그래서 rank가 1, 2로 갈림)
-- 행 4의 rank=2는 비용 순위일 뿐 — 실제 연산자 타입·rank 배정은 ④⑤ 쿼리로 확인한 값 기준 (이 덱에선 조인=JOIN, 3·4=IXSCAN으로 표기)
+- **rank** = 같은 부모(target)로 들어오는 간선들끼리의 순번. 정렬 1순위 `total_cost`는 target 자신의 비용이라 같은 칸에선 동일 — 실제로는 2순위 **`stream_count`(더 많은 행을 흘려보낸 입력)가 대표(1등)를 정한다**
+- source_id·target_id는 **같은 번호 공간**(둘 다 operator_id) — 행 5의 source 2와 행 2·4의 target 2는 같은 조인 연산자다. 예외는 -1(연산자가 아닌 테이블/인덱스 객체 표시)뿐
 </Slide>
 
 <Slide kick="등장인물">
