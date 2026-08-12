@@ -9,7 +9,7 @@ import CopyWebpackPlugin from 'copy-webpack-plugin';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default {
-  entry: './src/main.jsx',
+  entry: './src/app/main.jsx',
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'assets/technote.[contenthash:8].js',
