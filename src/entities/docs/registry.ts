@@ -120,6 +120,12 @@ const CAT_LIST = [
 export const CATS: readonly Cat[] = CAT_LIST;
 
 export const DOCS: readonly Doc[] = [
+  { cat: 'react', slug: 'fsd-architecture', session: 'deep', at: '2026-08-12',
+    t: 'FSD 아키텍처 · 왜 이 구조를 쓰나',
+    d: '6층 의존 규칙 · features 판단 기준 · 다른 아키텍처와의 차이 · 단점',
+    k: 'fsd feature sliced design 아키텍처 구조 층 레이어 layer slice 의존 방향 import features entities widgets shared 판단 기준 atomic design clean architecture hexagonal bulletproof react mvc 폴더 구조 단점 순환 참조',
+    load: () => import('./content/react/fsd-architecture.mdx') },
+
   { cat: 'db2', slug: 'db2-savingplan-design', session: 'work', at: '2026-08-12', deploy: 'pending',
     t: 'SavingPlan 구현 설계 · 데이터 플로우',
     d: 'Oracle 구조 대조 → 변경 파일 5개 → DB2 고유 난점 3가지',

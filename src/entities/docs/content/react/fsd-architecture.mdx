@@ -1,0 +1,338 @@
+import './fsd-architecture.css';
+
+<Slide kick="React · 아키텍처">
+<h1>FSD<br/>Feature-Sliced Design</h1>
+<Lead>폴더를 **역할**이 아니라 **의존 방향**으로 나누는 방법. 이 프로젝트가 쓰는 구조다.</Lead>
+<Muted>왜 골랐는지, 다른 아키텍처와 뭐가 다른지, 뭐가 불편한지까지.</Muted>
+</Slide>
+
+<Slide kick="문제 ①">
+## 폴더를 "종류"로 나누면 생기는 일
+
+대부분 이렇게 시작한다. 파일 종류별로 담는 방식이다.
+
+```
+src/
+  components/   Button, DeckViewer, NotifyBell, SearchBox, CategoryCard …
+  hooks/        useRead, useTheme, useSearch …
+  utils/        docKey, formatDate, storage …
+  pages/        Home, Category, Deck
+```
+
+처음 20개 파일까지는 잘 굴러간다. 문제는 **파일이 늘어날 때가 아니라, 기능을 지울 때** 드러난다.
+
+<Warn>"알림 기능을 걷어내자"가 되면 `components/` `hooks/` `utils/` 세 군데를 뒤져야 한다.
+무엇이 알림 전용이고 무엇이 공용인지 **폴더 구조가 알려주지 않는다.**</Warn>
+</Slide>
+
+<Slide kick="문제 ②">
+## 진짜 문제는 의존이 얽히는 것
+
+<div className="fsd-d">
+<svg viewBox="0 0 560 210" role="img" aria-label="6개 모듈이 서로 아무 방향으로나 참조해 선이 얽힌 그림">
+  <g className="tangle">
+    <line x1="80" y1="60" x2="280" y2="150"/>
+    <line x1="280" y1="60" x2="80" y2="150"/>
+    <line x1="280" y1="60" x2="480" y2="150"/>
+    <line x1="480" y1="60" x2="280" y2="150"/>
+    <line x1="80" y1="60" x2="480" y2="60"/>
+    <line x1="80" y1="150" x2="480" y2="150"/>
+    <line x1="480" y1="60" x2="80" y2="150"/>
+    <g><circle cx="80" cy="60" r="30"/><text x="80" y="64">Search</text></g>
+    <g><circle cx="280" cy="60" r="30"/><text x="280" y="64">Notify</text></g>
+    <g><circle cx="480" cy="60" r="30"/><text x="480" y="64">Theme</text></g>
+    <g><circle cx="80" cy="150" r="30"/><text x="80" y="154">Card</text></g>
+    <g><circle cx="280" cy="150" r="30"/><text x="280" y="154">Deck</text></g>
+    <g><circle cx="480" cy="150" r="30"/><text x="480" y="154">Read</text></g>
+  </g>
+</svg>
+<div className="cap">모듈 6개, 참조 방향 제한 없음 → 어디를 고쳐야 무엇이 깨지는지 알 수 없다</div>
+</div>
+
+파일이 어느 폴더에 있느냐는 **의존을 제한하지 않는다.** `components/A` 가 `components/B` 를 부르고
+B가 다시 A를 부르는 순환도 아무 경고 없이 만들어진다.
+
+<Note>FSD 의 출발점: **폴더 위치가 곧 "무엇을 import 해도 되는가"의 규칙이 되게 하자.**</Note>
+</Slide>
+
+<Slide kick="해법">
+## 6개 층, 한 방향
+
+<div className="fsd-d">
+<svg viewBox="0 0 560 350" role="img" aria-label="app, pages, widgets, features, entities, shared 6개 층이 위에서 아래로 쌓여 있고 import 는 아래 방향으로만 흐른다">
+  <path className="axis" d="M40 26 L40 316 M33 306 L40 318 L47 306"/>
+  <text className="axis-t" x="18" y="180" transform="rotate(-90 18 180)">IMPORT 방향</text>
+
+  <g className="ly">
+    <rect x="80" y="20" width="450" height="44" rx="10"/>
+    <text className="nm" x="100" y="41">app</text>
+    <text className="ro" x="100" y="57">라우팅 · 전역 부트스트랩</text>
+  </g>
+  <g className="ly">
+    <rect x="80" y="74" width="450" height="44" rx="10"/>
+    <text className="nm" x="100" y="95">pages</text>
+    <text className="ro" x="100" y="111">라우트 단위 화면 — 조립만</text>
+  </g>
+  <g className="ly">
+    <rect x="80" y="128" width="450" height="44" rx="10"/>
+    <text className="nm" x="100" y="149">widgets</text>
+    <text className="ro" x="100" y="165">여러 페이지가 쓰는 큰 UI 덩어리</text>
+  </g>
+  <g className="ly acc">
+    <rect x="80" y="182" width="450" height="44" rx="10"/>
+    <text className="nm" x="100" y="203">features</text>
+    <text className="ro" x="100" y="219">사용자 행동 하나 = 슬라이스 하나</text>
+  </g>
+  <g className="ly">
+    <rect x="80" y="236" width="450" height="44" rx="10"/>
+    <text className="nm" x="100" y="257">entities</text>
+    <text className="ro" x="100" y="273">도메인 데이터와 그 규칙</text>
+  </g>
+  <g className="ly">
+    <rect x="80" y="290" width="450" height="44" rx="10"/>
+    <text className="nm" x="100" y="311">shared</text>
+    <text className="ro" x="100" y="327">도메인을 모르는 무상태 조각</text>
+  </g>
+</svg>
+</div>
+
+규칙은 하나뿐이다. **위층은 아래층만 import 한다.** 역방향도, 같은 층끼리도 금지.
+</Slide>
+
+<Slide kick="규칙">
+## 지켜지면 얻는 것
+
+<Flow steps={[
+  {t:'위치 = 권한', d:'파일 경로만 봐도 뭘 import 해도 되는지 안다'},
+  {t:'순환 불가', d:'한 방향이라 구조적으로 순환이 안 생긴다', accent:true},
+  {t:'삭제가 안전', d:'슬라이스 폴더 하나만 지우면 끝'},
+]} />
+
+`features/notify/` 를 통째로 지우면 알림 기능이 사라진다. 아래층(`entities` `shared`)은
+알림의 존재를 **모르므로** 영향이 없다. 위층에서 부르던 곳만 컴파일 에러로 드러난다.
+
+<Note>"지우기 쉬운가"가 구조가 잘 잡혔는지 판별하는 가장 빠른 질문이다.</Note>
+</Slide>
+
+<Slide kick="핵심 판단">
+## features 에 뭘 넣는가
+
+가장 자주 헷갈리는 층이다. 기준은 하나다 — **동사로 이름이 나오는가.**
+
+<div className="tscroll">
+
+| 후보 | 이름이 이렇게 나온다 | 판정 |
+|---|---|---|
+| 검색창 | "검색<G>한다</G>" | <G>features/search/</G> |
+| 테마 전환 | "테마를 바<G>꾼다</G>" | <G>features/theme/</G> |
+| 읽음 추적 | "읽음을 기록<G>한다</G>" | <G>features/read-tracking/</G> |
+| 문서 목록 데이터 | "문서<B>다</B>" — 명사 | <B>entities/docs/</B> |
+| 버튼 스타일 | 행동이 아님 | <B>shared/ui/</B> |
+| 덱 뷰어 | 행동이 아니라 화면 덩어리 | <B>widgets/</B> |
+
+</div>
+
+<Warn>**명사면 feature 가 아니다.** `features/user/` `features/docs/` 처럼 도메인 이름이 붙으면
+그건 entity 다. feature 는 그 데이터로 사용자가 **무엇을 하는지**를 담는다.</Warn>
+</Slide>
+
+<Slide kick="핵심 판단">
+## 세 가지 실전 신호
+
+<Flow col steps={[
+  {t:'① 페이지가 200줄을 넘는다', d:'상태·핸들러를 features 로 내린다. 페이지는 조립만.'},
+  {t:'② 두 feature 가 서로를 필요로 한다', d:'잘못 쪼갠 것. 합치거나 공통분모를 entities/shared 로 내린다.', accent:true},
+  {t:'③ feature 가 다른 feature 의 UI 를 쓴다', d:'그 UI 를 shared/ui 로 내린다.'},
+]} />
+
+②가 특히 중요하다. FSD 에서 **같은 층끼리 import 는 금지**라, 서로 필요해졌다는 건
+경계를 잘못 그었다는 신호다. 규칙을 어기는 게 아니라 **설계를 다시 보라는 알람**으로 읽어야 한다.
+
+<Muted>딱 한 페이지에서만 쓰는 컴포넌트라면 페이지 파일 안에 그냥 둔다. 미리 쪼개지 않는다.</Muted>
+</Slide>
+
+<Slide kick="위반">
+## 어긋나면 이렇게 생겼다
+
+<div className="fsd-d">
+<svg viewBox="0 0 560 190" role="img" aria-label="features 에서 entities 로 가는 화살표는 정상, entities 에서 features 로 올라가는 화살표는 위반">
+  <defs>
+    <marker id="fsd-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--good)"/>
+    </marker>
+    <marker id="fsd-ng" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--bad)"/>
+    </marker>
+  </defs>
+  <g className="bx">
+    <rect x="60" y="30" width="180" height="50" rx="10"/>
+    <text x="90" y="60">features/search</text>
+    <rect x="330" y="30" width="180" height="50" rx="10"/>
+    <text x="356" y="60">entities/docs</text>
+  </g>
+  <path className="ok" d="M244 46 L322 46"/>
+  <text className="ok-t" x="252" y="36">정상</text>
+  <path className="ng" d="M322 66 L248 66"/>
+  <text className="ng-t" x="252" y="88">위반 — 아래층이 위층을 안다</text>
+  <text className="ok-t" x="60" y="150">아래층은 위층의 존재를 몰라야 재사용·삭제가 안전하다</text>
+</svg>
+</div>
+
+눈으로는 안 보이므로 명령으로 훑는다.
+
+```bash
+# 아래층이 위층을 부르는지 (하나라도 걸리면 배치가 틀린 것)
+grep -rn "from '.*\.\./\(app\|pages\)/" src/features src/entities src/shared
+grep -rn "from '.*\.\./widgets/"        src/features src/entities src/shared
+grep -rn "from '.*\.\./features/"       src/entities src/shared
+```
+</Slide>
+
+<Slide kick="실제 코드">
+## 이 프로젝트의 배치
+
+```
+src/
+  app/        App.tsx  main.tsx
+  pages/      HomePage  CategoryPage  DeckPage
+  widgets/    DeckViewer
+  features/   search/  theme/  notify/  read-tracking/
+  entities/   docs/ ─ registry.ts + content/*.mdx
+  shared/     ui/slide-kit.tsx  assets/shell.css  types/mdx.d.ts
+```
+
+`HomePage` 가 조립만 한다는 게 실제로 이런 모양이다.
+
+```tsx
+// pages/HomePage.tsx — 데이터는 entities, 기능은 features 에서 가져다 쓴다
+import { GROUPS, catsOfGroup, docsOf, docKey } from '../entities/docs/registry';
+import { useReadList } from '../features/read-tracking/useRead';
+import SearchBox from '../features/search/SearchBox';
+
+const tilesOf = (g: GroupKey): Tile[] =>
+  catsOfGroup(g).map((c) => {
+    const docs = docsOf(c.f);
+    return { ...c, count: docs.length, unread: docs.filter(...).length };
+  });
+```
+
+<Note>`entities/docs/registry.ts` 는 어느 층에서든 import 한다. 셸 전체의 단일 소스라
+**최하층처럼 취급**하기로 한 의도된 예외다.</Note>
+</Slide>
+
+<Slide kick="비교 ①">
+## 기능별 폴더 (Bulletproof React) 와 뭐가 다른가
+
+가장 널리 쓰이는 대안이다. 기능 단위로 폴더를 자르는 것까지는 같다.
+
+```
+src/features/
+  awesome-feature/
+    api/  components/  hooks/  stores/  types/  index.ts
+```
+
+<div className="tscroll">
+
+| | Bulletproof React | FSD |
+|---|---|---|
+| 자르는 단위 | 기능(feature) 하나 | **층 × 슬라이스** 2차원 |
+| 층 개념 | 없음 (features 와 그 외) | 6층 고정 |
+| 도메인 데이터 위치 | 각 feature 안 | <span className="fsd-pick">entities 로 분리</span> |
+| 기능 간 참조 | 관례로 금지, 강제는 없음 | 같은 층 참조 금지 |
+| 학습 비용 | 낮음 | <B>높음</B> |
+
+</div>
+
+핵심 차이는 **entities 의 유무**다. 여러 기능이 같은 데이터를 쓸 때
+Bulletproof 는 그 데이터가 어느 feature 소유인지 애매해지는데, FSD 는 아래층으로 내려 해결한다.
+
+<Muted>이 프로젝트에서 `docs` 가 정확히 그 경우다 — 홈·카테고리·검색·알림 넷이 같은 레지스트리를 본다.</Muted>
+</Slide>
+
+<Slide kick="비교 ②">
+## Atomic Design · Clean Architecture
+
+<div className="tscroll">
+
+| 아키텍처 | 나누는 축 | FSD 와의 관계 |
+|---|---|---|
+| **Atomic Design** | UI 크기 (atom→organism) | **직교한다.** 도메인 로직 배치엔 답을 안 준다. FSD 의 `shared/ui` 안에서 병행 가능 |
+| **Clean / Hexagonal** | 도메인 ↔ 인프라 (안쪽이 바깥을 모름) | 발상이 같다. FSD 는 그걸 **프론트 폴더 규칙으로 단순화**한 판본 |
+| **MVC / MVVM** | 표현 ↔ 로직 ↔ 데이터 | 층이 3개뿐. 기능이 늘면 각 층이 비대해짐 |
+| **모듈 없음(타입별)** | 파일 종류 | 소규모에선 가장 빠름. 지우기가 어려워지는 게 한계 |
+
+</div>
+
+<Note>Atomic Design 은 **경쟁 관계가 아니다.** "버튼은 atom" 같은 UI 분류는
+`shared/ui/` 내부 정리에 그대로 쓸 수 있다. 층 규칙과 충돌하지 않는다.</Note>
+</Slide>
+
+<Slide kick="단점" err>
+## FSD 가 불편한 지점
+
+솔직하게. 공짜가 아니다.
+
+- **초반 오버헤드가 크다.** 파일 5개짜리 프로젝트에 6층은 과하다. 폴더가 코드보다 많아진다.
+- **판단이 계속 필요하다.** "이건 widget 인가 feature 인가"에서 매번 멈춘다. 팀이면 합의 비용이 붙는다.
+- **강제 수단이 없다.** 층 규칙을 어겨도 **빌드는 통과한다.** lint 규칙이나 grep 으로 따로 막아야 한다.
+- **경로가 길어진다.** `../../entities/docs/registry` 같은 상대경로가 늘어난다. 별칭 설정이 사실상 필수가 된다.
+- **공식 표준이 아니다.** 러시아권에서 시작해 문서·사례가 영어권 대안보다 적다. 검색으로 답 찾기가 상대적으로 어렵다.
+
+<Warn>가장 흔한 실패는 **과잉 적용**이다. 슬라이스가 3개인데 층을 6개 만들면
+구조가 도움이 아니라 세금이 된다. 층은 비워둬도 되지만, 억지로 채우면 안 된다.</Warn>
+</Slide>
+
+<Slide kick="선택 이유">
+## 그럼에도 이 프로젝트가 FSD 를 쓰는 이유
+
+<Flow col steps={[
+  {t:'① 데이터 소스가 하나로 수렴한다', d:'registry.ts 를 홈·카테고리·검색·알림 넷이 공유 → entities 층이 정확히 이 문제를 푼다', accent:true},
+  {t:'② 기능이 계속 붙는 성격이다', d:'검색·테마·알림·읽음추적이 이미 독립적으로 늘어났다'},
+  {t:'③ 레거시와 공존해야 한다', d:'localStorage 계약을 공유하는 경계를 features 안에 가둬 두면 나중에 걷어내기 쉽다'},
+]} />
+
+반대로, 이게 **문서 몇 장짜리 정적 페이지였다면 FSD 를 고르지 않았을 것**이다.
+구조는 규모와 변화량에 비례해야 한다.
+
+<Muted>판단 근거는 `.claude/rules/architecture.md` 와 `fsd-placement` 스킬에 규칙으로 옮겨 두었다.</Muted>
+</Slide>
+
+<Slide kick="앞으로">
+## 어떻게 관리할 것인가
+
+**성장 순서를 미리 정해 두면 매번 고민하지 않아도 된다.**
+
+<div className="tscroll">
+
+| 시점 | 할 일 |
+|---|---|
+| 지금 | 6층 유지. `shared/lib` `shared/config` 는 **실제로 쓸 때** 만든다 |
+| 슬라이스가 8개를 넘으면 | 각 슬라이스에 `index.ts` 를 두어 public API 를 명시 (내부 파일 직접 import 차단) |
+| 상대경로가 3단계를 넘으면 | `@/` 별칭 도입 — Vite · webpack · tsconfig **세 곳**을 함께 고쳐야 한다 |
+| 위반이 반복되면 | grep 대신 `eslint-plugin-boundaries` 로 강제 |
+| 페이지가 5개를 넘으면 | `widgets` 층을 본격적으로 쓴다 (지금은 DeckViewer 하나뿐) |
+
+</div>
+
+<Note>**하지 말 것:** 새 층을 만드는 것. 6층 안에서 해결한다.
+층을 추가하는 순간 "어느 층인가" 판단 비용이 급증한다.</Note>
+</Slide>
+
+<Slide kick="정리">
+## 한 장 요약
+
+<div className="tscroll">
+
+| 질문 | 답 |
+|---|---|
+| 규칙이 몇 개인가 | **하나.** 위층은 아래층만 import |
+| features 에 뭘 넣나 | 이름이 **동사**로 나오는 것 |
+| entities 에 뭘 넣나 | 이름이 **명사**로 나오는 것 (도메인 데이터) |
+| 두 feature 가 서로 필요하면 | 경계를 잘못 그은 것 — 합치거나 아래로 내린다 |
+| 잘 잡혔는지 어떻게 아나 | **"이 폴더 하나만 지우면 기능이 사라지는가"** |
+| 언제 안 쓰나 | 규모가 작고 변화가 적을 때 |
+
+</div>
+
+<Warn>층 규칙은 빌드가 잡아주지 않는다. 구조를 바꾼 뒤에는 위반 탐지 grep 을 **직접** 돌릴 것.</Warn>
+</Slide>

@@ -1,0 +1,28 @@
+/* FSD 덱 전용 도식 스타일 — 클래스는 .fsd-d 아래로만 스코프 */
+.fsd-d { margin: 18px 0 22px; }
+.fsd-d svg { width: 100%; height: auto; display: block; max-width: 620px; margin: 0 auto; }
+
+/* 층 스택 도식 */
+.fsd-d .ly rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+.fsd-d .ly.acc rect { fill: var(--accent-soft); stroke: var(--accent); }
+.fsd-d .ly .nm { fill: var(--ink); font: 700 15px var(--mono); }
+.fsd-d .ly .ro { fill: var(--muted); font: 400 12.5px var(--sans); }
+.fsd-d .axis { stroke: var(--accent); stroke-width: 2; fill: none; }
+.fsd-d .axis-t { fill: var(--accent); font: 700 11px var(--mono); letter-spacing: .14em; }
+
+/* 의존 방향 도식 */
+.fsd-d .bx rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+.fsd-d .bx text { fill: var(--ink); font: 600 13px var(--mono); }
+.fsd-d .ok { stroke: var(--good); stroke-width: 2.2; fill: none; marker-end: url(#fsd-ok); }
+.fsd-d .ng { stroke: var(--bad); stroke-width: 2.2; fill: none; stroke-dasharray: 6 4; marker-end: url(#fsd-ng); }
+.fsd-d .ok-t { fill: var(--good); font: 700 12px var(--sans); }
+.fsd-d .ng-t { fill: var(--bad); font: 700 12px var(--sans); }
+
+/* 얽힌 의존 도식 */
+.fsd-d .tangle line { stroke: var(--bad); stroke-width: 1.6; opacity: .55; }
+.fsd-d .tangle circle { fill: var(--panel); stroke: var(--muted); stroke-width: 1.5; }
+.fsd-d .tangle text { fill: var(--muted); font: 600 11px var(--mono); text-anchor: middle; }
+.fsd-d .cap { text-align: center; color: var(--muted); font-size: 13px; margin-top: 10px; }
+
+/* 비교 표에서 강조 */
+.fsd-pick { color: var(--accent); font-weight: 700; }
