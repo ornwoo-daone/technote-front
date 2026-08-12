@@ -1,0 +1,111 @@
+<Slide kick="AWS · IAM DB 인증">
+<h1>비밀번호 없이 IAM으로<br/>RDS · DocumentDB · ElastiCache 접속</h1>
+<Lead>에이전트가 DB에 붙을 때 **평문 비밀번호 대신 AWS IAM**으로 인증하도록 3개 DB 계열에 확장했다. 자격증명 해석은 **한 곳으로 공통화**했다. (커밋 #313)</Lead>
+</Slide>
+
+<Slide kick="배경">
+## 왜 필요했나 — 대기업 보안 규정
+
+- **LG U+ 같은 대형 고객사**는 보안 정책상 DB 접속에 **평문 ID/PW 저장을 금지**하고 AWS **IAM 인증**을 요구
+- IAM은 **단기 토큰/임시 자격증명** 사용 → 상시 비밀번호 유출·관리 리스크 제거 → 보안 감사 통과
+- 미지원 시 **해당 고객사 도입 자체가 불가** → "있으면 좋은 기능"이 아니라 **엔터프라이즈 레퍼런스 확보 전제조건**
+</Slide>
+
+<Slide kick="전체 그림">
+## DB 계열별 인증 방식이 다르다
+
+| DB 계열 | 메커니즘 | 토큰을 어디에 | 핵심 제약 |
+|---|---|---|---|
+| **RDS/Aurora**<br/>MySQL·MariaDB·PG | RDS IAM 토큰 | JDBC **password** 자리 | — |
+| **DocumentDB 5.0+**<br/>(mongo 호환) | `MONGODB-AWS` | 드라이버 credential | mongo 드라이버 **4.1+**, `$external` IAM 유저 |
+| **ElastiCache 7+**<br/>Valkey 7.2+ | **SigV4** pre-signed | Redis **AUTH** 비번 | **TLS 필수**, elasticache_name |
+
+<Muted>공통점: 접속 시점마다 **단기 토큰/임시 자격증명**을 새로 발급해 비밀번호 자리에 끼워넣는다.</Muted>
+</Slide>
+
+<Slide kick="공통 설계 · 핵심">
+## 자격증명 해석을 한 곳으로 (3경로)
+
+`AwsCredentialUtil.resolveCredentials()` — RDS/DocumentDB/ElastiCache **공용**. 설정에 따라 3경로로 분기:
+
+<Flow steps={[
+  {t:'① aws_arn', d:'AssumeRole (base=고정키 or 기본체인) → 임시 자격증명', accent:true},
+  {t:'② access/secret key', d:'whatap.conf 고정 키'},
+  {t:'③ 기본 체인', d:'env / ~/.aws / ECS / EC2 role / EKS'}
+]} />
+
+<Note>우선순위 **arn > 고정키 > 기본체인**. 기본체인은 **실제 출처를 리플렉션으로 판별**(env/파일/ECS/EC2/EKS)해 **인증 로그에 경로 라벨**을 남김 → 어디서 자격증명을 얻었는지 추적 가능.</Note>
+</Slide>
+
+<Slide kick="① RDS/Aurora">
+## 토큰을 JDBC 비밀번호로
+
+- `AwsIamAuth` — `RdsIamAuthTokenGenerator`로 서명된 토큰(15분) 생성
+- `ConnectionMaker.resolvePassword(user, base)`: `aws_iam_auth` 켜지면 토큰을 비번 자리에, **실패 시 기존 비번 fallback**
+- 접속 API·드라이버·쿼리 코드 **무변경** — 비번 만드는 한 지점만 교체
+
+```
+// ConnectionMaker.resolvePassword
+if (!conf.aws_iam_auth) return basePassword;
+String token = AwsIamAuth.getToken(region, host, port, user, key, secret, arn);
+return (token != null) ? token : basePassword;   // 실패 fallback
+```
+</Slide>
+
+<Slide kick="② DocumentDB">
+## MONGODB-AWS + 드라이버 업그레이드
+
+- 인증 메커니즘 `MONGODB-AWS` → mongo 드라이버 **4.1+** 필요 → **3.12 → 4.11.5 업그레이드**(build.gradle/pom)
+- IAM 유저/역할을 `$external` DB에 생성해야 함 (**primary user는 IAM 인증 불가**)
+- `MongoConnection.openIam()` → `MongoCredential`에 **AwsCredential supplier** 연결
+- supplier가 **세션 토큰까지 포함**(EC2/ECS/AssumeRole 임시자격증명) → **접속마다 갱신**
+
+<Warn>드라이버 major 업그레이드(3.12→4.11.5)는 API 변경·구버전 jar 충돌 검증을 동반 → 실제 난이도의 큰 부분. (구버전 mongo jar가 jdbc dir에 남으면 로딩 실패)</Warn>
+</Slide>
+
+<Slide kick="③ ElastiCache">
+## SigV4 pre-signed 토큰을 AUTH 비번으로
+
+- RDS 같은 전용 헬퍼가 없어 `AWS4Signer`로 **직접 SigV4 서명** (`ElastiCacheIamAuth`)
+- `http://<cacheName>/?Action=connect&User=<userId>` 를 pre-sign(15분) → 그 쿼리스트링이 **Redis AUTH 비밀번호**
+- **TLS 필수**(`db_ssl=true`), `db_user` = IAM 유저 ID, 서명엔 **엔드포인트가 아니라 `elasticache_name`**(캐시/복제그룹명, 소문자)
+- **serverless**면 `ResourceType=ServerlessCache` 추가 (db_ip의 `.serverless.`로 자동 판별)
+
+<Muted>안정화: IAM 토큰 **만료 전 pool 재생성** + `close()` NPE 가드 (커밋 27a1cd20d).</Muted>
+</Slide>
+
+<Slide kick="설정 방법">
+## whatap.conf 키
+
+```
+aws_iam_auth   = on            # 비번 대신 IAM 사용
+aws_region     = <AWS_REGION>
+# 자격증명 (택1 · 우선순위 arn > key > 기본체인)
+aws_arn        = <ROLE_ARN>    # AssumeRole
+aws_access_key = <KEY>         # 고정 키
+aws_secret_key = <SECRET>
+# (없으면 기본체인: env / ~/.aws / ECS / EC2 role / EKS)
+# ElastiCache 전용
+elasticache_name       = <CACHE_NAME>   # ARN 기준 이름(소문자)
+elasticache_serverless = on             # 생략 시 .serverless. 자동판별
+```
+</Slide>
+
+<Slide kick="고려/갓챠">
+## 놓치기 쉬운 것들
+
+- **DocumentDB**: 드라이버 4.1+ 필수, `$external` IAM 유저, primary user 불가
+- **ElastiCache**: TLS 필수, 서명은 endpoint 아닌 **cache name**, 토큰 15분 → 만료 전 pool 재생성
+- **ElastiCache serverless**: `CLIENT LIST` 미지원 → **액티브 세션 수집 skip** (노드형은 정상). IAM과 무관한 별도 제약
+- **자격증명 경로**: 3경로 + 기본체인 하위(env/파일/ECS/EC2/EKS) 모두 지원, 어느 경로로 성공했는지 **로그로 확인 가능**
+</Slide>
+
+<Slide kick="검증">
+## 인증 성공을 로그로 확인 (설계된 검증 훅)
+
+- 토큰 생성 시: `"IAM token generated via <경로 라벨>"` (어느 자격증명 경로인지 기록)
+- 실제 인증 통과 시: 명령 성공 시점에 **1회 경로 로깅** (`markIamAuthSuccess`) — 토큰 생성 성공 ≠ 접속 성공을 구분
+- 실패 시: `Logger.red`로 경로 라벨 + 원인 출력
+
+<Note>즉 **토큰 생성·인증 성공·실패가 각각 자격증명 경로 라벨과 함께 로그로 남아**, 실제 접속 시 어느 경로(arn/키/EC2 role 등)로 인증이 통과했는지 로그만으로 확인·검증할 수 있다.</Note>
+</Slide>

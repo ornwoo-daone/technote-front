@@ -1,0 +1,289 @@
+<Slide kick="DBX · 구현 설계">
+<h1>DB2 SavingPlan<br/>코드 변경 & 데이터 플로우</h1>
+<Lead>Oracle·Tibero에는 있는 **주기적 Plan 저장**이 DB2에는 없다. 무엇을 어디에 넣어야 하는지, 데이터가 어떤 경로로 흐르는지 정리한다.</Lead>
+<Muted>기준 브랜치 `feature/db2-cachedplan` · 공용 코어 리팩터 `df31e9d8c` 반영</Muted>
+</Slide>
+
+<Slide kick="현재 상태">
+## DB2만 주기 수집이 없다
+
+|  | Oracle | Tibero | DB2 |
+|---|---|---|---|
+| 주기 Plan 저장 Task | <G>OraSavingPlan</G> | <G>TibSavingPlan</G> | <B>없음</B> |
+| Plan 변경 감지 | <G>db_oracle_plan_change</G> | <G>db_tibero_plan_change</G> | <B>없음</B> |
+| On-demand Plan | 있음 | 있음 | <G>plan / planCached / planFromActivity</G> |
+| config 키 | `ora_plan_saving`=true | `tib_plan_saving`=false | <B>`db2_opt` 하나뿐</B> |
+
+<Note>DB2는 **on-demand(사용자가 UI에서 누를 때)** 만 있다. 지나간 SQL의 plan은 남지 않는다.</Note>
+</Slide>
+
+<Slide kick="참조 모델">
+## Oracle 데이터 플로우
+
+<Flow steps={[
+  {t:'OraActiveSessionList', d:<>5초 주기. 세션 훑으며 <b>대상 선정</b></>},
+  {t:'savingPlanList', d:'synchronizedList 큐', accent:true},
+  {t:'OraSavingPlan', d:'SubCountCollector. 큐를 drain'},
+  {t:'v$sql_plan', d:'메모리에서 SELECT'},
+  {t:'TagCountPack', d:'db_oracle_plan_save', accent:true},
+]} />
+
+<Warn>**핵심:** SavingPlan 클래스는 **대상을 고르지 않는다**. 큐를 비우고 조회·전송만 한다. 실제 판단 로직은 전부 ActiveSessionList 안에 있다.</Warn>
+</Slide>
+
+<Slide kick="참조 모델">
+## 대상 선정은 ActiveSessionList가 한다
+
+```
+// OraActiveSessionList.java:1636
+if ((!username.equals("SYS")) && sql_hash_value != 0 && plan_hash_value != 0) {
+    if (lastCallEt >= 5) {                    // 5초 이상 실행중인 세션만
+        long savingMapValue = (long)sql_child_number << 32 | plan_hash_value;
+        if (!savingPlanCheck.containsKey(savingMapValue) && savingPlan) {
+            savingPlanCheck.put(savingMapValue, 0);   // 중복 방지
+            savingPlanList.add(sp);                   // 큐에 적재
+        }
+    }
+}
+```
+
+- **필터** — SYS 계정 제외 + `lastCallEt >= 5`(5초 이상 실행)
+- **중복 방지** — `savingPlanCheck` HashMap, 하루 1회 clear
+</Slide>
+
+<Slide kick="참조 모델">
+## Plan 변경 감지도 같은 자리
+
+```
+// OraActiveSessionList.java:1656 — 별도 클래스 없음. 인라인.
+long planChangeKey = ((long)sql_child_number << 32) | sql_hash_value;
+Long prev = planChangeCheckMap.get(planChangeKey);          // ExpiringMap 8h
+if (prev != null && prev != plan_hash_value) {
+    tc.category = "db_oracle_plan_change";
+    tc.put("before_plan_hash_value", prev);
+    tc.put("after_plan_hash_value", plan_hash_value);
+    DataPackSender.send(tc);
+    // 변경 전 plan / 변경 후 plan 을 둘 다 savingPlanList 에 넣는다
+}
+planChangeCheckMap.put(planChangeKey, plan_hash_value);
+```
+
+<Note>키는 **SQL**(`child_number|sql_hash_value`), 값은 **plan**(`plan_hash_value`). “같은 SQL인데 plan이 달라졌다”를 이 두 개의 분리로 판단한다.</Note>
+</Slide>
+
+<Slide kick="목표">
+## DB2 데이터 플로우 (신규)
+
+<Flow steps={[
+  {t:'Db2ActiveSessionList', d:<>MON_GET_ACTIVITY. <b>executable_id</b> 이미 수집중</>},
+  {t:'savingPlanList', d:'신규 큐', accent:true},
+  {t:'Db2SavingPlan', d:'신규 클래스 · SubCountCollector', accent:true},
+]} />
+
+<Flow steps={[
+  {t:'EXPLAIN_FROM_SECTION', d:<>package cache 섹션 → EXPLAIN 테이블에 <b>write</b></>},
+  {t:'EXPLAIN_* SELECT', d:'5-key 3-way join → 트리/depth'},
+  {t:'DELETE', d:<>staging 즉시 정리 <b>(DB2 전용)</b></>, bad:true},
+  {t:'TagCountPack', d:'db_db2_plan_save', accent:true},
+]} />
+
+<Warn>Oracle은 뷰를 **읽기만** 한다. DB2는 EXPLAIN 프로시저가 고객 DB에 **행을 쓴다** → 정리 단계가 추가로 필요.</Warn>
+</Slide>
+
+<Slide kick="변경 범위">
+## 손대야 하는 파일 5개
+
+| 파일 | 변경 | 규모 |
+|---|---|---|
+| `Configure.java` | `db2_plan_saving` 등 키 신설 | 소 |
+| `Db2ActiveSessionList.java` | **대상 선정 + 큐 + 변경감지** | <W>대</W> |
+| `Db2SavingPlan.java` <G>(신규)</G> | 큐 drain → 조회 → 전송 | 중 |
+| `Db2Helper.java` | PlanLists 반환 진입점 + **DELETE** | 중 |
+| `CountCollector.java` | `instanceSub` 에 등록 | 소 |
+
+<Note>무게 중심이 신규 클래스가 아니라 **Db2ActiveSessionList** 에 있다는 점이 Oracle과 동일하다.</Note>
+</Slide>
+
+<Slide kick="변경 ①">
+## Configure — 키 신설
+
+```
+// 현재 db2 관련 키는 db2_opt 하나가 전부 (Configure.java:447)
+public int db2_opt = 0;
+
+// 추가 제안
+public boolean db2_plan_saving  = false;  // Tibero 처럼 기본 off 로 시작
+public String  db2_plan_evmon   = "WHATAP_ACT";  // 하드코딩 제거
+public int     db2_plan_min_et  = 5;      // 대상 최소 실행시간(초)
+```
+
+- 기본값 **false** — 고객 DB에 EXPLAIN 부하/쓰기가 생기므로 Oracle(true)이 아니라 Tibero(false) 쪽을 따르는 게 안전
+- `ACTIVITY_EVMON_NAME` 은 지금 `Db2Helper.java:328` 에 하드코딩 — 설정으로 빼야 함
+</Slide>
+
+<Slide kick="변경 ②">
+## Db2ActiveSessionList — 큐 적재
+
+```
+// 재료는 이미 다 있다 (11.x 쿼리 :114)
+a.UOW_ID, a.ACTIVITY_ID, a.EXECUTABLE_ID   // + a.appl_id (:86)
+
+// 읽는 자리도 이미 있다 (:971)
+long uowId       = rs.getLong("UOW_ID");
+long activityId  = rs.getLong("ACTIVITY_ID");
+executableId     = rs.getString("EXECUTABLE_ID");
+
+// 여기에 추가 —
+if (savingPlan && executableId != null && !executableId.isEmpty()) {
+    if (elapsed >= conf.db2_plan_min_et && !savingPlanCheck.containsKey(executableId)) {
+        savingPlanCheck.put(executableId, 0);
+        savingPlanList.add(new SavingPlan(executableId, applId, uowId, activityId));
+    }
+}
+```
+
+<Warn>단, 이 컬럼들은 **11.x 쿼리에만** 있고 pack 적재도 `(10.5+ || 11+)` 가드 안이다 → SavingPlan도 같은 가드 필요.</Warn>
+</Slide>
+
+<Slide kick="변경 ③">
+## Db2SavingPlan — 신규 클래스
+
+```
+public class Db2SavingPlan implements IDBTask {
+    public void init() { }                // reset 전용. 초기화는 생성자에서
+
+    public void process(long t) {
+        for (SavingPlan sp : drain(Db2ActiveSessionList.savingPlanList)) {
+            PlanLists L = Db2Helper.planForSaving(sp.executableId);   // 신규 진입점
+            if (L == null || L.id.size() == 0) continue;              // 빈 결과는 전송 안 함
+
+            TagCountPack tc = new TagCountPack();   // 1 row = 1 pack
+            tc.time = t;
+            tc.category = "db_db2_plan_save";
+            tc.putTag("oname", DbInfo.oname);
+            tc.putTag("_no_5m_hour_", 0);
+            tc.put("executable_id", sp.executableId);
+            tc.put("id", L.id);  tc.put("parent_id", L.parent_id);  tc.put("depth", L.depth);
+            tc.put("operator_type", L.operator_type);
+            tc.put("cardinality", L.cardinality);  tc.put("total_cost", L.total_cost);
+            tc.put("object_schema", L.object_schema);  tc.put("object_name", L.object_name);
+            tc.put("source_type", L.source_type);
+            DataPackSender.send(tc);
+        }
+    }
+}
+```
+</Slide>
+
+<Slide kick="변경 ④">
+## Db2Helper — 진입점 + 정리
+
+<Lead>`df31e9d8c` 로 이미 공용 코어가 있다. 새로 만들 게 거의 없다.</Lead>
+
+```
+// 이미 3경로가 공유하는 코어
+callExplainFromSection() → fetchPlanRows() → collectRow() → populatePlanLists()
+
+// planCached 는 MapValue 를 돌려준다 (ControlHandler 응답용)
+// SavingPlan 은 ListValue 묶음(PlanLists)이 필요 → 내부 메서드 하나만 노출
+public static PlanLists planForSaving(String executableId) {
+    ...  ExplainKey key = callExplainFromSection(conn, executableId);
+         fetchPlanRows(conn, key, ctx);
+         populatePlanLists(L, ctx);
+         deleteExplainRows(conn, key);          // ★ 신규
+}
+```
+
+<Note>`planCached()` 를 `planForSaving()` 위에 얹으면 on-demand 경로도 DELETE 혜택을 같이 받는다.</Note>
+</Slide>
+
+<Slide kick="변경 ⑤">
+## CountCollector — 등록 위치
+
+```
+// CountCollector.java:338 — Oracle 은 tasks 가 아니라 instanceSub 에 들어간다
+if (conf.ora_plan_saving)
+    instanceSub.tasks.add(new OraSavingPlan());
+
+// DB2 는 instanceSub 에 등록된 게 지금 하나도 없다
+if (conf.db2_plan_saving)
+    instanceSub.tasks.add(new Db2SavingPlan());
+```
+
+| Collector | 인터페이스 | 주기 | 여기 들어가나 |
+|---|---|---|---|
+| CountCollector | IDBCounterTask | ~5s | 아니오 |
+| CountCollectorSlow | IDBCounterTask | 느린 주기 | 아니오 |
+| <G>SubCountCollector</G> | <G>IDBTask</G> | \_counter_interval (min 5s) | <G>예</G> |
+</Slide>
+
+<Slide kick="DB2 난점 ①">
+## EXPLAIN staging을 반드시 지워야 한다
+
+<Warn>**실측(4.77, 2026-08-11):** 같은 SQL을 2번 EXPLAIN → EXPLAIN_STATEMENT 2→4행, EXPLAIN_OPERATOR 27→51행. **dedup도 덮어쓰기도 자동삭제도 없다.**</Warn>
+
+- 현재 `Db2Helper` 전체에 **DELETE가 0건** — on-demand라 빈도가 낮아 지금은 버티는 것
+- 주기 수집으로 바꾸면 **수집 주기 × 세션 수** 만큼 고객 DB에 행이 쌓인다
+- 가득 차면 삭제가 아니라 **수집 중단**(PCTDEACTIVATE / SQL1630N) → 조용히 망가진다
+
+<Muted>→ 읽은 직후 `EXPLAIN_TIME` 5-key 스코프로 STATEMENT / OPERATOR / STREAM DELETE. 보관은 와탭 서버가 한다.</Muted>
+</Slide>
+
+<Slide kick="DB2 난점 ②">
+## plan_hash_value 에 해당하는 게 없다
+
+|  | SQL 식별 | Plan 식별 | 변경 판단 |
+|---|---|---|---|
+| Oracle | sql_hash_value + child | <G>plan_hash_value</G> | <G>둘이 분리 → 정확</G> |
+| DB2 | ? | <B>없음</B> | <B>불확실</B> |
+
+- `executable_id` 는 **섹션 식별자**지 plan 해시가 아니다
+- 재컴파일로 plan이 바뀌면 executable_id도 바뀌지만, **역은 보장되지 않는다** (캐시 evict 후 재적재 등)
+- → executable_id 변경만으로 `db_db2_plan_change` 를 쏘면 **오탐** 위험
+
+<Note>**미결정.** 1단계는 plan_save만, plan_change는 판단 근거를 따로 확보한 뒤 분리 진행하는 것을 권장.</Note>
+</Slide>
+
+<Slide kick="DB2 난점 ③">
+## 버전 가드 — 10.5 미만은 불가
+
+```
+// Db2ActiveSessionList.java:1127
+if ((versionMajor >= 10 && versionMinor >= 5) || versionMajor >= 11) {
+    tc.put("uow_id", tc_uow_id);
+    tc.put("activity_id", tc_activity_id);
+    tc.put("executable_id", tc_executable_id);
+}
+```
+
+- `EXECUTABLE_ID` 는 **11.x 쿼리에만** select 되어 있다 — 10.1 / 9.7 쿼리에는 없음
+- SavingPlan은 같은 가드를 걸고, 미만 버전에서는 **Task 자체를 등록하지 않는** 편이 낫다
+</Slide>
+
+<Slide kick="주의">
+## Oracle에서 복사하면 안 되는 것
+
+| 위치 | 문제 |
+|---|---|
+| `OraSavingPlan:25` | `savingPlanParam` 이 **static** 인데 클래스는 인스턴스별 — 공유 상태 |
+| `OraSavingPlan:132` | `sp_count` 를 조회 **전에** 증가 → 결과가 비어도 빈 pack 전송 |
+| `OraSavingPlan:105,160` | `con_nameLv` 수집만 하고 pack에 안 넣음 — 죽은 코드 |
+| `OraActiveSessionList:1676` | `Map<Long,Integer>` 에 **null 값** put (containsKey 조회라 우연히 안전) |
+| `TibSavingPlan:33-47` | 쓰이지 않는 plan-change 잔재 필드 다수 |
+
+<Note>구조는 Oracle을 따르되 **이 5가지는 옮기지 않는다.**</Note>
+</Slide>
+
+<Slide kick="정리">
+## 진행 순서 & 미결정
+
+- **1단계** — Db2Helper 에 DELETE 추가 (지금 있는 누적 버그부터 해소, SavingPlan과 무관하게 이득)
+- **2단계** — Configure 키 + Db2SavingPlan + CountCollector 등록 (plan_save 만)
+- **3단계** — Db2ActiveSessionList 대상 선정·큐 적재
+- **4단계** — plan_change 는 판단 근거 확보 후 별도
+
+<Warn>**사용자 결정 필요**
+<br/>① 대상 선정 기준 — Active Session 기반(Oracle 동일) / Top SQL(PKG_CACHE) 기반 / 둘 다
+<br/>② staging 정리 방식 — 읽은 직후 DELETE / 주기 일괄 DELETE
+<br/>③ plan_change 를 1차에 포함할지</Warn>
+</Slide>

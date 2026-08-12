@@ -1,0 +1,79 @@
+<Slide kick="DB2 · Plan 코드 리팩터">
+<h1>Plan 빌드 로직 공용화<br/>· 스레드 안전 확보</h1>
+<Lead>세 plan 조회 경로가 같은 트리·depth 계산을 **중복 구현**했고, 하나는 **static 가변 맵**을 써 동시 호출 시 데이터가 섞일 수 있었다. 공용 코어로 통합해 중복 ~120줄 제거 + 스레드 안전 확보.</Lead>
+</Slide>
+
+<Slide kick="배경 · 도식">
+## 세 경로, 하나의 알고리즘
+
+<svg className="dg" viewBox="0 0 720 250" role="img" aria-label="세 경로가 공용 코어로 수렴하는 구조">
+  <rect className="dg-box" x="10" y="20" width="230" height="50" rx="9"/>
+  <text className="dg-mono" x="24" y="50">plan() · EXPLAIN PLAN</text>
+  <rect className="dg-box" x="10" y="100" width="230" height="50" rx="9"/>
+  <text className="dg-mono" x="24" y="130">planCached() · FROM_SECTION</text>
+  <rect className="dg-box" x="10" y="180" width="230" height="50" rx="9"/>
+  <text className="dg-mono" x="24" y="210">planFromActivity() · ACTIVITY</text>
+  {/* arrows converge */}
+  <path className="dg-line" d="M240 45 C330 45 330 120 420 120"/>
+  <path className="dg-line" d="M240 125 H420"/>
+  <path className="dg-line" d="M240 205 C330 205 330 120 420 120"/>
+  <polygon className="dg-arrow" points="420,115 432,120 420,125"/>
+  {/* core */}
+  <rect className="dg-box acc" x="436" y="78" width="274" height="84" rx="12"/>
+  <text className="dg-t" x="573" y="106" textAnchor="middle">공용 코어</text>
+  <text className="dg-tm" x="573" y="128" textAnchor="middle">collectRow → calcDepth → populatePlanLists</text>
+  <text className="dg-tm" x="573" y="146" textAnchor="middle">지역 PlanContext (호출마다 독립)</text>
+</svg>
+
+<Muted>"가져오는 방법"만 다르고, 트리·depth·출력은 셋이 동일 → 공용화 대상.</Muted>
+</Slide>
+
+<Slide kick="문제 1">
+## 중복 구현
+
+`planCached`는 메서드로 잘 분리돼 있었지만, 기존 `plan()`은 같은 로직을 **인라인으로 재작성**(적재 루프 + 출력 루프). 고칠 때 두 곳을 따로 손봐야 하는 구조였다.
+</Slide>
+
+<Slide kick="문제 2 · 핵심">
+## static 가변 맵 = 스레드 안전성 버그
+
+```
+// plan() 이 트리를 클래스 static 필드로 재사용
+요청 A: tree[1] = [2]   // 넣는 중
+요청 B: tree[1] = [9]   // 동시에 덮어씀 (같은 static tree)
+→ A의 calcDepth가 B의 엣지까지 계산 → 엉뚱한 plan / NPE
+```
+
+<Muted>동시 control 요청 시 데이터가 섞임. CLAUDE.md 리뷰 체크리스트 "static mutable" 위반.</Muted>
+</Slide>
+
+<Slide kick="해결">
+## 공용 코어 + 지역 컨텍스트
+
+- 행 적재를 `collectRow(rs, ctx)` 로 추출 → 3경로 공유
+- `plan()`을 지역 `PlanContext` + 공용 메서드로 교체 → **static 필드 5개 제거**
+- 인라인 SQL을 `buildExplainSelectSql()` 로 추출
+- 죽은 static 필드(`planInfo`) 제거
+</Slide>
+
+<Slide kick="결과">
+## −184 / +62, 스레드 안전
+
+| 지표 | 변화 |
+|---|---|
+| 코드 라인 | <G>−184 / +62 (약 120줄 순감)</G> |
+| 중복 구현 | <G>3경로 → 1 공용 코어</G> |
+| 스레드 안전 | <G>static 제거 → 호출마다 독립 PlanContext</G> |
+| 수동 clear() | <G>불필요 (지역 변수 자동 폐기)</G> |
+| 컴파일 | <G>BUILD SUCCESS (동작 보존)</G> |
+
+<Note>이후 개선(EXPLAIN cleanup, depth 엣지케이스 방어)을 **공용 코어 한 곳만** 고치면 3경로 모두 적용. commit `df31e9d8c`</Note>
+</Slide>
+
+<Slide kick="배운 점">
+## 공용화 ≠ static 공유
+
+컴팩트함은 **로직(메서드) 재사용**에서 나오지, 데이터를 static으로 두는 데서 나오지 않는다. 상태는 <b>호출 지역(PlanContext)</b>으로 둬야 동시성 안전 + 자동 정리를 얻는다.
+
+<Muted>사이클 간 상태 유지가 필요한 델타 Task는 ExpiringMap instance 필드를 쓰지만, 한 호출로 끝나는 plan 조회는 지역 변수가 정답.</Muted>
+</Slide>

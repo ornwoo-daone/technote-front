@@ -1,0 +1,81 @@
+<Slide kick="DB2 · Plan 수집">
+<h1>DB2 Plan은 어떻게 수집되나</h1>
+<Lead>실행된 SQL의 컴파일된 plan(section)은 <b>package cache(메모리)</b>에 있고, 그걸 가리키는 **executable_id**로 꺼내 트리로 만들어 서버에 보낸다.</Lead>
+</Slide>
+
+<Slide kick="파이프라인">
+## executable_id → 트리 → 서버
+
+<Flow steps={[
+  {t:'executable_id', d:'활성세션에서 획득 (MON_GET_ACTIVITY / PKG_CACHE_STMT)'},
+  {t:'EXPLAIN_FROM_SECTION', d:'캐시 섹션을 EXPLAIN_* 테이블에 "펼침"'},
+  {t:'3-way JOIN SELECT', d:'STATEMENT+OPERATOR+STREAM'},
+  {t:'tree→depth→전송', d:'calcDepth → 서버', accent:true},
+]} />
+</Slide>
+
+<Slide kick="조회 방법">
+## plan 조회 4가지 (소스별)
+
+| 소스 | 방법 | 키 | 재최적화 | 부하 |
+|---|---|---|---|---|
+| package cache (메모리) | `EXPLAIN_FROM_SECTION` | **executable_id** | ❌ | <G>낮음</G> |
+| catalog (정적, disk) | `EXPLAIN_FROM_CATALOG` | 패키지 좌표 | ❌ | <G>낮음</G> |
+| event monitor | `EXPLAIN_FROM_ACTIVITY` | appl/uow/act | ❌ | <W>캡처 부하</W> |
+| SQL 텍스트 | `EXPLAIN PLAN ... FOR` | SQL 텍스트 | ✅ 풀 | <B>높음</B> |
+
+<Muted>section explain은 이미 쓰인 plan을 디컴파일이라 가벼움. SQL 텍스트 재-explain이 가장 무겁다.</Muted>
+</Slide>
+
+<Slide kick="코드">
+## 3경로 + 공용 코어 (Db2Helper)
+
+```
+plan(db, sql, user, pwd)          // SQL 텍스트 → EXPLAIN PLAN
+planCached(executableId)          // 캐시 → EXPLAIN_FROM_SECTION
+planFromActivity(appl,uow,act)    // 이벤트모니터 → EXPLAIN_FROM_ACTIVITY
+// 3경로 공용 코어 (commit df31e9d8c)
+collectRow(rs, ctx)               // 한 행 적재
+calcDepth(tree, 1, 0, depthMap)   // 트리 깊이 계산
+populatePlanLists(L, ctx)         // 9개 배열로 출력
+```
+</Slide>
+
+<Slide kick="depth">
+## depth 계산 요약
+
+<svg className="dg" viewBox="0 0 380 190" role="img" aria-label="노드1 밑에 2, 2 밑에 3과 4가 달린 트리, depth 0/1/2">
+  <line className="dg-line" x1="190" y1="44" x2="190" y2="78"/>
+  <line className="dg-line" x1="190" y1="100" x2="110" y2="136"/>
+  <line className="dg-line" x1="190" y1="100" x2="270" y2="136"/>
+  <circle className="dg-node" cx="190" cy="28" r="17"/><text className="dg-nt" x="190" y="33">1</text>
+  <circle className="dg-node" cx="190" cy="90" r="17"/><text className="dg-nt" x="190" y="95">2</text>
+  <circle className="dg-node leaf" cx="110" cy="152" r="17"/><text className="dg-nt" x="110" y="157">3</text>
+  <circle className="dg-node leaf" cx="270" cy="152" r="17"/><text className="dg-nt" x="270" y="157">4</text>
+  <text className="dg-tm" x="214" y="33">depth 0</text>
+  <text className="dg-tm" x="214" y="95">depth 1 (부모+1)</text>
+  <text className="dg-tm" x="134" y="157">depth 2</text>
+  <text className="dg-tm" x="294" y="157">depth 2</text>
+</svg>
+
+- DB2 EXPLAIN엔 **depth 컬럼이 없어** stream(엣지)으로 트리를 만든 뒤 계산
+- **tree**(부모→자식들)=depth 계산용, **parentMap**(자식→부모)=parent_id 채우기용
+- **calcDepth**: 루트 1=0, 자식마다 +1 (재귀)
+- **parent_id vs depth**: parent_id=원본 복사(연결), depth=계산(높이) — 다른 값
+
+<Note>예제·도식·코드 단계별 → <a href="db2-plan-depth-deck.html">Plan depth 슬라이드 덱</a></Note>
+</Slide>
+
+<Slide kick="설계">
+## SavingPlan (구상)
+
+<Flow steps={[
+  {t:'Db2ActiveSessionList', d:'executable_id 수집 → 큐'},
+  {t:'Db2SavingPlan (주기)', d:'FROM_SECTION → 공용 코어 → TagCountPack'},
+  {t:'와탭 서버', d:'db_db2_plan_save', accent:true},
+]} />
+
+- 기본 `FROM_SECTION`(캐시, 무누적) / evict 필수 시만 FROM_ACTIVITY
+- EXPLAIN_* 테이블 **읽고 즉시 DELETE** (→ <a href="disk-retention.html">disk 누적</a>)
+- Oracle은 v$sql_plan에 depth 있어 계산 안 함 / DB2는 calcDepth 필수
+</Slide>

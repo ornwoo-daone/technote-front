@@ -1,0 +1,84 @@
+<Slide kick="DB2 · Plan 저장 disk 누적">
+<h1>이벤트모니터·EXPLAIN 테이블은<br/>자동 삭제되지 않는다</h1>
+<Lead>2026-08-11, DB2 11.1.1.1(테스트서버)에서 직접 검증. 요약: **둘 다 오래된 것 자동 삭제 없음. 가득 차면 삭제가 아니라 "수집 중단".**</Lead>
+</Slide>
+
+<Slide kick="배경">
+## 왜 확인했나
+
+- plan 수집은 EXPLAIN_\* 테이블(디스크)에 쓰고 읽는다 → 고객 DB에 데이터가 쌓이는가?
+- SavingPlan으로 **주기 실행**하면 이 누적이 더 빨라짐 → 실측 필요
+- 이벤트모니터(FROM_ACTIVITY) 방식은 disk에 캡처 → retention이 있나?
+</Slide>
+
+<Slide kick="검증 A">
+## EXPLAIN 테이블: 같은 쿼리도 무한 누적
+
+`SELECT * FROM SYSCAT.TABLES` 를 동일하게 2번 EXPLAIN:
+
+|  | EXPLAIN_STATEMENT | EXPLAIN_OPERATOR |
+|---|---|---|
+| 1번째 후 | 2 | 27 |
+| **2번째 (같은 SQL)** | <B>4</B> | <B>51</B> |
+
+<Muted>→ dedup/덮어쓰기 없이 매번 풀세트 추가. 현재 코드는 DELETE가 없어 조회마다 누적.</Muted>
+</Slide>
+
+<Slide kick="검증 B">
+## 이벤트모니터: 시간 지나도 삭제 안 됨
+
+| 시점 | ACTIVITY 행 수 |
+|---|---|
+| 활동 25개 후 | 39 |
+| 90초 후 (수집 OFF) | <G>39 (그대로)</G> |
+
+<Muted>age 기반 자동 삭제 없음 — 방치하면 무한 증가.</Muted>
+</Slide>
+
+<Slide kick="검증 C · 핵심">
+## 가득 차면 삭제가 아니라 "중단"
+
+작은 테이블스페이스 + `PCTDEACTIVATE 30`(=1200p)에서 활동으로 채움:
+
+<div className="tscroll"><table>
+  <thead><tr><th>단계</th><th>STATE</th><th>USED_PAGES</th><th>행 수</th></tr></thead>
+  <tbody>
+    <tr><td>채우기 전</td><td>1 (active)</td><td>736</td><td>0</td></tr>
+    <tr><td>임계 돌파</td><td className="bad">0 (비활성)</td><td>1216</td><td>126</td></tr>
+    <tr><td>400개 더 실행</td><td>0</td><td>1216</td><td className="good">126 (불변)</td></tr>
+    <tr><td>재활성 시도</td><td colSpan="3" className="bad">SQL1630N (PCTDEACTIVATE 한계) 거부</td></tr>
+  </tbody>
+</table></div>
+
+<svg className="dg" viewBox="0 0 660 96" role="img" aria-label="테이블스페이스가 30퍼센트 임계에서 수집 중단되고 기존 행은 유지됨">
+  <rect className="dg-box" x="20" y="30" width="600" height="32" rx="8"/>
+  <rect className="dg-accf" x="20" y="30" width="182" height="32" rx="8" opacity="0.85"/>
+  <line x1="200" y1="18" x2="200" y2="72" strokeDasharray="4 3" style={{stroke:'var(--bad)',strokeWidth:2}}/>
+  <text className="dg-tm" x="20" y="80">used 736 → 1216p</text>
+  <text className="dg-badf" x="204" y="16" fontFamily="var(--sans)" fontSize="12" fontWeight="700">30% → 수집 STOP</text>
+  <text className="dg-goodf" x="330" y="50" fontFamily="var(--sans)" fontSize="13" fontWeight="700">126행 그대로 (삭제 아님)</text>
+  <text className="dg-tm" x="620" y="80" textAnchor="end">4000p</text>
+</svg>
+
+<Muted>→ 자동 비활성 + 기존 행 유지. 오래된 것 삭제로 자리 안 만듦.</Muted>
+</Slide>
+
+<Slide kick="비교">
+## 메모리 vs 디스크 — 정리 방식이 정반대
+
+|  | package cache (메모리) | event monitor / EXPLAIN (disk) |
+|---|---|---|
+| 오래된 것 | <G>DB2 자동 evict (LRU)</G> | <B>자동 삭제 X</B> |
+| 가득 차면 | 자기제한 | <B>수집 중단 / 무한 증가</B> |
+
+<Note>**Oracle 대조:** AWR(디스크)은 retention(기본 8일)으로 MMON이 오래된 것 자동 purge — DB2와 정반대. 단 에이전트는 양쪽 다 메모리를 읽어 이 차이에 안 묶임.</Note>
+</Slide>
+
+<Slide kick="결론 / 대응">
+## 읽고 나서 즉시 지운다
+
+<Warn>**에이전트는 EXPLAIN_\* 테이블에 쓰고 → 읽고 → 즉시 DELETE(explain_time 스코프)** 로 정리해야 함. 이벤트모니터(disk) 의존은 무한증가·수집중단 리스크로 **기본 채택 X**. 보관은 **와탭 서버**가 담당.</Warn>
+
+- SavingPlan 기본 경로 = `FROM_SECTION`(캐시, 무누적)
+- staging(EXPLAIN 테이블)은 읽은 뒤 DELETE → 고객 DB 무영향
+</Slide>

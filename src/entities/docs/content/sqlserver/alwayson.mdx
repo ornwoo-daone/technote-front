@@ -1,0 +1,63 @@
+<Slide kick="SQL Server · AlwaysOn">
+<h1>AlwaysOn HADR 토폴로지 수집</h1>
+<Lead>AlwaysOn Availability Group의 **replica 동기화 상태**와 **HADR 대기(wait) 지표**를 수집해 복제 상태·부하를 모니터링한다. `MsAlwaysOn` (IDBCounterTask).</Lead>
+</Slide>
+
+<Slide kick="동작 조건">
+## HADR 환경에서만 수집
+
+- `MsInfo.isHadr` 가 true일 때만 실행 (일반 인스턴스는 skip)
+- 로컬 replica 기준(`is_local = 1`)으로 자기 관점의 상태를 봄
+- PRIMARY replica의 group_id로 AG 소속 DB들을 조회
+</Slide>
+
+<Slide kick="수집 ① 토폴로지">
+## replica 동기화 상태 <span className="rc"></span>
+
+카테고리 `db_mssql_topology` — DB별 replica 상태:
+
+- `synchronization_state_desc` (SYNCHRONIZED / SYNCHRONIZING …)
+- role(PRIMARY/SECONDARY), is_local, replica server name
+- **역할 변경 감지**: 이전 role과 비교해 failover 발생 추적
+
+```
+// sys.dm_hadr_database_replica_states drs
+// JOIN sys.dm_hadr_availability_replica_states ars
+// WHERE group_id = (PRIMARY 인 로컬 replica의 group_id)
+```
+</Slide>
+
+<Slide kick="수집 ② HADR wait">
+## 동기화 대기 지표 (delta)
+
+인스턴스 레벨 누적값을 **delta 계산**(ExpiringMap에 이전값 저장)해서 전송:
+
+| wait_type | 의미 |
+|---|---|
+| `HADR_SYNC_COMMIT` | 동기 커밋 대기 (primary가 secondary 확인 대기) |
+| `HADR_LOGCAPTURE_WAIT` | 로그 캡처 대기 |
+| `WRITELOG` | 로그 기록 대기 |
+
+<Muted>누적값이라 첫 수집은 baseline만 저장, 이후 delta 전송 (음수면 카운터 리셋 → 0).</Muted>
+</Slide>
+
+<Slide kick="범위">
+## 구현됨 vs 개념만
+
+| 항목 | 상태 |
+|---|---|
+| AlwaysOn HADR 토폴로지 (replica 동기화 상태) | <G>구현</G> |
+| HADR wait 지표 (delta) | <G>구현</G> |
+| 역할 변경(failover) 감지 | <G>구현</G> |
+| **FCI (Failover Cluster Instance)** | <W>개념만 — 미구현</W> |
+
+<Note>**FCI는 개념 정리까지만.** AlwaysOn AG와 별개로 WSFC 기반 인스턴스 레벨 클러스터라 수집 대상(클러스터 노드/리소스)이 달라, 필요 시 별도 카테고리로 확장 예정.</Note>
+</Slide>
+
+<Slide kick="참고">
+## 카테고리 분리 패턴
+
+DBX 규칙상 **기능별로 카테고리를 분리**한다 (서버가 카테고리 단위로 집계). AlwaysOn도 토폴로지 / wait 등 기능별로 나눠 전송하며, FCI를 구현하면 별도 카테고리로 추가하는 것이 이 패턴에 맞다.
+
+<Muted>코드: `whatap.dbx.counter.task.mssql.MsAlwaysOn`</Muted>
+</Slide>

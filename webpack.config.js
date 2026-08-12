@@ -1,12 +1,14 @@
 // 운영 빌드: webpack → dist/
-//  - src/ React 번들 + index.html 생성
-//  - public/(기존 사이트)을 dist/ 로 그대로 복사
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const babel = {
+  loader: 'babel-loader',
+  options: { presets: [['@babel/preset-react', { runtime: 'automatic' }]] },
+};
 
 export default {
   entry: './src/app/main.jsx',
@@ -15,24 +17,20 @@ export default {
     filename: 'assets/technote.[contenthash:8].js',
     clean: true,
   },
-  resolve: { extensions: ['.js', '.jsx'] },
+  resolve: { extensions: ['.js', '.jsx', '.mdx'] },
   module: {
     rules: [
+      { test: /\.jsx?$/, exclude: /node_modules/, use: babel },
       {
-        test: /\.jsx?$/,
-        exclude: /node_modules/,
-        use: {
-          loader: 'babel-loader',
-          options: { presets: [['@babel/preset-react', { runtime: 'automatic' }]] },
-        },
+        test: /\.mdx$/,
+        use: [babel, { loader: '@mdx-js/loader', options: { providerImportSource: '@mdx-js/react' } }],
       },
+      { test: /\.css$/, use: ['style-loader', 'css-loader'] },
     ],
   },
   plugins: [
     new HtmlWebpackPlugin({ template: './index.html' }),
-    new CopyWebpackPlugin({
-      patterns: [{ from: 'public', to: '.', info: { minimized: true } }],
-    }),
+    new CopyWebpackPlugin({ patterns: [{ from: 'public', to: '.' }] }),
   ],
   devtool: 'source-map',
   performance: { hints: false },
