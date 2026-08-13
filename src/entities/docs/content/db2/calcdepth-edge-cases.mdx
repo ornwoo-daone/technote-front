@@ -153,6 +153,11 @@ for (Integer child : tree.get(node)) {   // [3, 3, 3] 이면
 
 - 고리가 아니라 **잎은 있으니** 터지진 않는다 — 대신 층마다 중복이면 **곱으로** 불어난다 (2번씩 × 20층 ≈ 백만 순회)
 - depth 값은 같은 걸 다시 쓰니 안 틀림 → 증상이 "가끔 plan 조회가 느림"뿐이라 추적이 가장 어려운 유형
+
+<Warn><b>실측 확인 (2026-08-12)</b> — 이건 가설이 아니라 <b>에이전트의 평상시 동작</b>이다.
+EXPLAIN 한 번에 EXPLAIN_STATEMENT 행이 2개(<code>EXPLAIN_LEVEL</code> = O 원문 / P 최적화) 생기는데 둘의 5-key가 동일해서,
+수집 쿼리의 stt 조인에서 <b>모든 간선이 ×2로 곱해진다</b> (4.77 실측: 5행 → 10행).
+수정 후보: <code>stt.EXPLAIN_LEVEL = 'P'</code> 필터 추가.</Warn>
 </Slide>
 
 <Slide kick="나머지 케이스 ②">
