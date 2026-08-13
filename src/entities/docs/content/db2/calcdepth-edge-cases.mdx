@@ -156,8 +156,10 @@ for (Integer child : tree.get(node)) {   // [3, 3, 3] 이면
 
 <Warn><b>실측 확인 (2026-08-12)</b> — 이건 가설이 아니라 <b>에이전트의 평상시 동작</b>이다.
 EXPLAIN 한 번에 EXPLAIN_STATEMENT 행이 2개(<code>EXPLAIN_LEVEL</code> = O 원문 / P 최적화) 생기는데 둘의 5-key가 동일해서,
-수집 쿼리의 stt 조인에서 <b>모든 간선이 ×2로 곱해진다</b> (4.77 실측: 5행 → 10행).
-수정 후보: <code>stt.EXPLAIN_LEVEL = 'P'</code> 필터 추가.</Warn>
+3-way 수집 쿼리(<code>buildPlanSelectSql</code>)의 stt 조인에서 <b>모든 간선이 ×2로 곱해진다</b>.
+4.77 실측: EXPLAIN PLAN 경로·EXPLAIN_FROM_SECTION 경로 <b>둘 다 5행 → 10행</b> —
+즉 <b>planCached / planFromActivity 가 당하는 쪽</b>이고, 2-way 쿼리를 쓰는 plan() 은 무관.
+수정 후보: <code>stt.EXPLAIN_LEVEL = 'P'</code> 필터 한 줄 (10행 → 5행 복원 검증됨).</Warn>
 </Slide>
 
 <Slide kick="나머지 케이스 ②">
