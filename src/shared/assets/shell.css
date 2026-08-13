@@ -118,11 +118,14 @@ text-shadow:0 0 12px color-mix(in srgb,var(--accent) 45%,transparent)}
 .theme-pop .sw{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
 .theme-pop .sw:hover{background:rgba(255,255,255,.12)}
 
-/* 테마 색 동그라미: --b 는 그 테마의 '배경색'이라 팝업 배경과 거의 같은 색이다.
-   그래서 원의 오른쪽 아래가 배경에 묻혀 초승달처럼 잘려 보였다.
-   윤곽선을 뚜렷하게 줘서 --b 가 아무리 어두워도 온전한 원으로 읽히게 한다.
-   currentColor 기준이라 라이트/다크 양쪽에서 동작한다. */
+/* 테마 색 동그라미가 «초승달» 로 보이던 문제.
+   guide.css 의 원본은 radial-gradient(circle at 32% 30%, --a 52%, --b 54%) 다 —
+   강조색 원을 왼쪽 위로 치우치게 놓고 나머지를 배경색(--b)으로 채운다.
+   그런데 --b 는 그 테마의 «배경색» 이라 팝업 바탕과 거의 같은 색이어서,
+   오른쪽 아래가 통째로 사라지고 강조색만 초승달 모양으로 남는다.
+   → 윤곽선만 덧대는 걸로는 «잘린 달» 이 그대로다. 배경 자체를 대각 2분할로 바꾼다. */
 .theme-pop .sw i{
+  background:linear-gradient(135deg,var(--a) 0 50%,var(--b) 50% 100%);
   box-shadow:0 0 0 1px color-mix(in srgb, currentColor 38%, transparent),
              inset 0 1px 1px rgba(255,255,255,.28);
 }
