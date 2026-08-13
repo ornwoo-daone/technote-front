@@ -139,8 +139,8 @@ calcDepth(2, 1)
 권한·설정과 무관 — EXPLAIN이 성공해도 돌아온 데이터 자체가 고리이기 때문.</Warn>
 
 <Warn><b>프로덕션 발생 확인 (2.77 로그 수색, 2026-08-13)</b> — 가설이 아니라 이미 일어난 사고였다.
-<br/>· <b>7/27 02:25~02:27</b> db2-metrics-extension 에이전트: DBX_PLAN(id 213) 요청 직후 <b>4건</b>
-<br/>· <b>8/5 09:00~09:30</b> demo 에이전트: DBX_PLAN_HASH(id 224, planCached) 요청 직후 <b>7건</b>
+<br/>· <b>7/27 02:25–02:27</b> db2-metrics-extension 에이전트: DBX_PLAN(id 213) 요청 직후 <b>4건</b>
+<br/>· <b>8/5 09:00–09:30</b> demo 에이전트: DBX_PLAN_HASH(id 224, planCached) 요청 직후 <b>7건</b>
 <br/>스택트레이스 전부 <code>Db2Helper.calcDepth</code> 무한재귀. 원인 SQL도 특정 — 시연 부하 스크립트 4종(topsql 등)이
 <code>WITH t(n) AS (... UNION ALL SELECT n+1 FROM t ...)</code> <b>재귀 CTE로 데모 테이블을 생성</b>하고,
 그 쿼리의 plan을 UI에서 조회하는 순간 매번 터졌다. plan()·planCached() <b>두 경로 모두</b> 실발생.</Warn>
