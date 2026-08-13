@@ -58,6 +58,10 @@ MDX 는 dev `@mdx-js/rollup`, prod `@mdx-js/loader` 로 서로 다른 플러그�
 - `src/entities/docs/registry.test.ts` — 타입·빌드가 못 잡는 정합성 구멍
   (slug 중복, session 불일치, `at` 형식, 아이콘 파일 누락, 미등록 orphan mdx, `docKey` 형식 고정)
 - `src/features/read-tracking/useRead.test.ts` — localStorage 저장 형식 계약
+- `src/entities/docs/mdx-pipeline.test.ts` — dev/prod MDX 플러그인 설정 일치
+- `src/entities/docs/deck-crossref.test.ts` — 덱이 서로를 가리키는 문구의 카테고리 라벨 정합성
+
+덱을 새로 쓰거나 크게 고쳤으면 `deck-review` 스킬의 검증 절차를 따른다.
 
 테스트는 **자동으로 안 잡히는 것만** 검사한다. 빌드나 타입이 이미 막는 걸 또 검사하지 않는다
 (없는 `.mdx` 경로는 번들러가 빌드 에러로 잡으므로 테스트 대상이 아니다).
