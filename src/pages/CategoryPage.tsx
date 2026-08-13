@@ -3,8 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { CATS, sessionsOf, docsOf, docKey } from '../entities/docs/registry';
 import { useReadList } from '../features/read-tracking/useRead';
 import SearchBox from '../features/search/SearchBox';
-
-const fmt = (d: string): string => `생성 ${d}`;
+import DocList from '../widgets/DocList';
 
 export default function CategoryPage() {
   const { cat } = useParams<{ cat: string }>();
@@ -78,27 +77,7 @@ export default function CategoryPage() {
               </button>
             ))}
           </div>
-          <div className="toc">
-            {shown.map((d) => {
-              const isRead = read.includes(docKey(d));
-              const inner = (
-                <>
-                  {!isRead && <span className="newbadge">NEW</span>}
-                  <b>{d.t}</b><span>{d.d}</span>
-                  <div className="toc-meta">
-                    {d.deploy === 'pending' && <span className="deploy-tag pending">⏳ 미배포</span>}
-                    {d.deploy && d.deploy !== 'pending' && <span className="deploy-tag live">✅ 배포 {d.deploy}</span>}
-                    <span className="toc-date created">{fmt(d.at)}</span>
-                  </div>
-                </>
-              );
-              const cls = 'toc-item' + (isRead ? ' read' : ' new');
-              return d.legacy
-                ? <a key={d.slug} className={cls} href={d.legacy}>{inner}</a>
-                : <Link key={d.slug} className={cls} to={`/${d.cat}/${d.slug}`}>{inner}</Link>;
-            })}
-            {shown.length === 0 && <div className="session-empty">이 세션엔 아직 문서가 없습니다.</div>}
-          </div>
+          <DocList docs={shown} empty="이 세션엔 아직 문서가 없습니다." />
         </>
       )}
     </div>

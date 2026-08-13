@@ -13,6 +13,16 @@
 MDX 는 dev `@mdx-js/rollup`, prod `@mdx-js/loader` 로 서로 다른 플러그인을 쓴다 —
 `providerImportSource: '@mdx-js/react'` 옵션이 양쪽에 다 있어야 `MDXProvider` 매핑이 먹는다.
 
+### CSS 안의 절대경로 `url()` 은 prod 만 깨진다
+
+`src/` 의 CSS 에 `url('/assets/icons/x.png')` 를 쓰면 **webpack 만** 실패한다.
+
+- Vite: `/` 로 시작하는 URL 은 `publicDir` 기준이라 그대로 통과 → **dev 는 멀쩡하다**
+- webpack: `css-loader` 가 이걸 모듈로 해석하려 든다 → `Module not found`
+
+로더 설정(`css-loader` 의 `url.filter`)을 풀어 맞추지 말 것 — 두 빌드가 갈라지는 걸 늘리는 방향이다.
+**경로는 컴포넌트의 인라인 스타일로 옮긴다.** `BookmarkIcon.tsx` 의 `mask-image` 가 그 사례다.
+
 ## ⚠️ public/ 은 junction
 
 `public/` → `C:\htmls\dbx-guide` 의 junction이다. **복사본이 아니라 같은 실체.**

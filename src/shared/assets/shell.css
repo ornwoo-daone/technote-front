@@ -66,6 +66,50 @@ box-shadow:0 0 0 4px rgba(229,72,77,.2)}
 color:var(--muted);font-weight:700;margin:0 0 12px 4px;display:flex;align-items:center;gap:12px}
 .hub-label::after{content:"";flex:1;height:1px;background:var(--line)}
 
+/* ── 북마크 ─────────────────────────────────────────────────────────── */
+/* 리스트 항목은 통째로 링크(.toc-item)라 버튼을 안에 못 넣는다(중첩 인터랙티브).
+   그래서 .toc-row 로 감싸고 버튼을 형제로 두되, 시각적으로는 항목 안에 있는 것처럼 얹는다. */
+.toc-row{position:relative;display:flex}
+.toc-row>.toc-item{flex:1;padding-right:72px}
+/* 카드가 hover 에 3px 밀리므로(guide.css) 버튼도 같이 밀어 붙어 있게 한다 */
+.toc-row:hover>.toc-item{transform:translateX(3px);border-color:var(--accent)}
+/* 불투명한 원(--panel)을 깔면 카드 위에 «구멍» 처럼 얹혀 보인다.
+   평소엔 배경 없이 아이콘만 두고, 원은 hover·선택 때만 은은하게 깔린다. */
+.bm-btn{position:absolute;right:14px;top:50%;transform:translateY(-50%);z-index:5;
+width:46px;height:46px;border-radius:50%;border:1px solid transparent;background:transparent;
+cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:.15s;padding:0}
+.toc-row:hover .bm-btn{transform:translate(3px,-50%)}
+.bm-btn:hover{background:color-mix(in srgb,var(--accent) 12%,transparent);
+border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+.bm-btn.on{background:color-mix(in srgb,var(--accent) 14%,transparent);
+border-color:color-mix(in srgb,var(--accent) 34%,transparent)}
+.bm-btn:active{transform:translate(3px,-50%) scale(.92)}
+
+/* 아이콘 PNG 는 노랑 고정이라 팔레트와 부딪힌다 → 알파를 마스크로만 쓰고 색은 강조색으로 칠한다.
+   ⚠️ mask-image 의 «경로» 는 여기 두지 않는다 — css-loader 가 절대경로 url() 을 모듈로 해석하려 해
+   webpack 빌드만 «Module not found» 로 깨진다(Vite 는 그냥 통과시켜 dev 에선 멀쩡하다).
+   그래서 경로는 컴포넌트에서 인라인 스타일로 준다. */
+.bm-ico{width:28px;height:28px;display:block;background:var(--accent);
+-webkit-mask:center/contain no-repeat;mask:center/contain no-repeat;
+opacity:.4;transition:opacity .15s}
+.bm-btn:hover .bm-ico{opacity:.8}
+.bm-btn.on .bm-ico,.bm-ico.on{opacity:1}
+
+/* 홈 우상단 — 알림 벨(right:16px, 44px) 왼쪽 */
+.bm-nav{position:fixed;top:16px;right:70px;z-index:60;width:44px;height:44px;border-radius:50%;
+border:1px solid var(--line);background:var(--panel);cursor:pointer;
+display:inline-flex;align-items:center;justify-content:center;transition:.15s;text-decoration:none}
+.bm-nav:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(0,0,0,.3);transform:translateY(-1px)}
+.bm-nav .bm-ico{width:26px;height:26px;opacity:.85}
+.bm-nav:hover .bm-ico{opacity:1}
+.bm-ico.bm-hero{width:48px;height:48px;opacity:1;flex:none}
+.bm-count{position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;padding:0 5px;border-radius:99px;
+background:var(--accent);color:#1b2030;font:700 11px/19px var(--sans);text-align:center;pointer-events:none}
+
+/* 여러 카테고리가 섞이는 목록(북마크)에서만 붙는 카테고리 이름 */
+.toc-cat{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent);
+background:var(--accent-soft);border-radius:99px;padding:3px 10px}
+
 /* 카테고리 페이지 머리말 — 제목만 있으면 허전해서 홈 타일과 같은 로고를 얹는다.
    guide.css 의 크기 보정(ci-big·ci-wt…)은 «.cat-btn .ci-img» 로 스코프돼 있어 여기선 안 먹는다.
    그래서 같은 비율을 여기서 다시 준다 — 로고마다 여백이 달라 한 크기로는 안 맞는다. */
