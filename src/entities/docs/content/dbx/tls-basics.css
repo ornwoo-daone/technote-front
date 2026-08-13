@@ -1,0 +1,27 @@
+/* TLS 기초 덱 전용 도식 — .sec-d 아래로만 스코프 */
+.sec-d { margin: 16px 0 20px; }
+.sec-d svg { width: 100%; height: auto; display: block; max-width: 660px; margin: 0 auto; }
+.sec-d .cap { text-align: center; color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+.sec-d .bx rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+.sec-d .bx.acc rect { fill: var(--accent-soft); stroke: var(--accent); }
+.sec-d .bx.bad rect { fill: var(--bad-soft); stroke: var(--bad); }
+.sec-d .bx.good rect { fill: var(--good-soft); stroke: var(--good); }
+.sec-d .t1 { fill: var(--ink); font: 700 13px var(--mono); }
+.sec-d .t2 { fill: var(--muted); font: 400 11.5px var(--sans); }
+.sec-d .t3 { fill: var(--ink); font: 600 12px var(--sans); }
+.sec-d .lb { fill: var(--accent); font: 700 11px var(--mono); letter-spacing: .1em; }
+.sec-d .lb-b { fill: var(--bad); font: 700 11px var(--mono); letter-spacing: .1em; }
+.sec-d .lb-g { fill: var(--good); font: 700 11px var(--mono); letter-spacing: .1em; }
+
+.sec-d .ar { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#sec-ar); }
+.sec-d .ar-g { stroke: var(--good); stroke-width: 2; fill: none; marker-end: url(#sec-arg); }
+.sec-d .ar-b { stroke: var(--bad); stroke-width: 2; fill: none; stroke-dasharray: 5 4; marker-end: url(#sec-arb); }
+.sec-d .lifeline { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 3 5; }
+
+/* 계층 스택 */
+.sec-d .layer rect { stroke-width: 1.5; }
+.sec-d .layer .nm { fill: var(--ink); font: 700 13px var(--mono); }
+.sec-d .layer .ro { fill: var(--muted); font: 400 11.5px var(--sans); }
+
+.sec-term { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }

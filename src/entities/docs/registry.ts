@@ -120,6 +120,12 @@ const CAT_LIST = [
 export const CATS: readonly Cat[] = CAT_LIST;
 
 export const DOCS: readonly Doc[] = [
+  { cat: 'dbx', slug: 'tls-basics', session: 'support', at: '2026-08-13',
+    t: 'TLS · 인증서 · AES 기초',
+    d: '“TLS 코드가 없다”가 무슨 뜻인지부터 · SSL/TLS 차이 · mTLS · 코드 대조',
+    k: 'tls ssl 기초 basic 보안 security 암호화 encryption 인증서 certificate ca 신뢰사슬 mtls mutual 상호인증 aes ecb cbc gcm 대칭키 비대칭키 symmetric asymmetric 공개키 평문 plaintext 핸드셰이크 handshake sslsocket sslcontext keymanager trustmanager 무결성 integrity 기밀성 confidentiality 인증 authentication tls1.2 tls1.3 poodle',
+    load: () => import('./content/dbx/tls-basics.mdx') },
+
   { cat: 'dbx', slug: 'agent-server-encryption', session: 'support', at: '2026-08-13',
     t: '에이전트 ↔ 수집서버 통신 암호화',
     d: 'TLS 미사용 근거 · 액세스키 핸드셰이크 · encrypt_level/cypher_level · 코드 줄번호 대조',
