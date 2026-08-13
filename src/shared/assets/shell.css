@@ -68,8 +68,30 @@ width:60px;height:60px;border-radius:16px;font-family:var(--mono);font-size:22px
 color:var(--accent);border:1px solid var(--line);background:rgba(255,255,255,.05);
 text-shadow:0 0 12px color-mix(in srgb,var(--accent) 45%,transparent)}
 
-/* 테마 팝업: guide.css 의 고정 250px 로는 2열 그리드가 라벨('Interstellar')을 못 담아
-   스와치가 팝업 밖으로 삐져나온다. 열은 min-width:auto 라 내용보다 작아지지 못한다.
-   폰트 metric 에 의존하지 않도록 내용에 맞춰 늘어나게 한다 (좁은 화면은 max-width 로 방어). */
-.theme-pop{width:max-content;max-width:calc(100vw - 32px)}
+/* 테마 팝업 ─────────────────────────────────────────────────────────────
+   ① guide.css 의 고정 250px 로는 2열 그리드가 라벨('Interstellar')을 못 담아
+      스와치가 팝업 밖으로 삐져나온다. 열은 min-width:auto 라 내용보다 작아지지 못한다.
+      폰트 metric 에 의존하지 않도록 내용에 맞춰 늘어나게 한다.
+   ② guide.css 의 리퀴드 글래스 적용 목록에 .theme-pop 이 빠져 있어 혼자 불투명했다.
+      알림 패널(.nt-panel)과 같은 값으로 맞춘다. */
+.theme-pop{
+  width:max-content;max-width:calc(100vw - 32px);
+  border-radius:18px;
+  background:rgba(255,255,255,.10);
+  -webkit-backdrop-filter:blur(22px) saturate(1.7);backdrop-filter:blur(22px) saturate(1.7);
+  border:1px solid rgba(255,255,255,.18);
+  box-shadow:0 22px 60px rgba(0,0,0,.45);
+}
 .tp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* 스와치 버튼도 유리 위에 얹히도록 살짝 띄운다 */
+.theme-pop .sw{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
+.theme-pop .sw:hover{background:rgba(255,255,255,.12)}
+
+/* 테마 색 동그라미: --b 는 그 테마의 '배경색'이라 팝업 배경과 거의 같은 색이다.
+   그래서 원의 오른쪽 아래가 배경에 묻혀 초승달처럼 잘려 보였다.
+   윤곽선을 뚜렷하게 줘서 --b 가 아무리 어두워도 온전한 원으로 읽히게 한다.
+   currentColor 기준이라 라이트/다크 양쪽에서 동작한다. */
+.theme-pop .sw i{
+  box-shadow:0 0 0 1px color-mix(in srgb, currentColor 38%, transparent),
+             inset 0 1px 1px rgba(255,255,255,.28);
+}
