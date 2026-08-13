@@ -97,8 +97,9 @@ tree = \{ 1→[2], 2→[3], 3→[2] \} 에서 `calcDepth(1, 0)` 을 부르면:
   <text x="430" y="80" className="dg-t">JVM 스레드 스택은 유한 (기본 ~512KB·1MB)</text>
   <text x="430" y="105" className="dg-tm">프레임 하나당 수십 byte × 수만 번 = 한도 초과</text>
   <text x="430" y="150" className="dg-t">그리고 이건 Exception 이 아니라 Error 다</text>
-  <text x="430" y="175" className="dg-tm">catch (Exception e) 로는 안 잡힌다</text>
-  <text x="430" y="195" className="dg-tm">→ plan 조회 요청 스레드가 그대로 뚫린다</text>
+  <text x="430" y="175" className="dg-tm">경로상 catch(Exception) 은 전부 관통 —</text>
+  <text x="430" y="195" className="dg-tm">최상위 run() 의 catch(Throwable) 에서야 잡힌다</text>
+  <text x="430" y="215" className="dg-tm">→ 스레드는 생존, 응답은 실종 (UI 무응답·재시도 유도)</text>
 </svg>
 
 <Warn>무한루프(CPU 100%로 계속 도는 것)와도 다르다 — <b>수만 스텝 만에 확정적으로 터진다.</b>
