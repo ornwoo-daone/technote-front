@@ -42,7 +42,9 @@ export default {
   },
   plugins: [
     new HtmlWebpackPlugin({ template: './index.html' }),
-    new CopyWebpackPlugin({ patterns: [{ from: 'public', to: '.' }] }),
+    // repo 가 소유하는 static/ 만 복사한다. public/ 은 레거시 사이트로의 junction 이라
+    // 빌드 입력에서 제외 (→ .claude/rules/build.md)
+    new CopyWebpackPlugin({ patterns: [{ from: 'static', to: '.' }] }),
   ],
   devtool: 'source-map',
   performance: { hints: false },

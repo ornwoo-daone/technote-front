@@ -43,7 +43,11 @@ MDX 는 dev `@mdx-js/rollup`, prod `@mdx-js/loader` 로 서로 다른 플러그�
 그대로 동작한다. React 셸은 **같은 localStorage 키를 공유**하므로 키 계약을 깨지 않는다
 (→ [registry 규칙](registry.md) 마지막 절).
 
-⚠️ **`guide.css` 는 레거시와 React 가 공유한다.** 스타일은 있는데 그걸 만들던 vanilla JS 가
+**레거시는 은퇴 예정이다** (→ `.claude/rules/legacy-retirement.md`). 1단계로 React 빌드는
+`public/` 에서 분리됐다 — 정적 자원은 repo 가 소유하는 `static/` 에서 온다.
+**React 스타일·자산 수정은 `static/` 과 `src/` 에만 한다. `public/` 은 건드리지 않는다.**
+
+⚠️ **`public/assets/guide.css` 는 이제 레거시 전용으로 동결됐다.** 스타일은 있는데 그걸 만들던 vanilla JS 가
 이식되지 않으면 기능이 아무 에러 없이 사라진다. 이식 현황과 남은 누락은
 `.claude/rules/legacy-parity.md` 에 표로 관리한다 — 레거시 동작을 건드릴 때 먼저 볼 것.
 

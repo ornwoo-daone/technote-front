@@ -8,7 +8,7 @@ import { CATS, DOCS, GROUPS, SESSIONS, docKey, docsOf, findDoc, sessionsOf, cats
 
 const here = dirname(fileURLToPath(import.meta.url));
 const contentDir = join(here, 'content');
-const iconsDir = join(here, '../../../public/assets/icons');
+const iconsDir = join(here, '../../../static/assets/icons');
 
 const publicDir = join(here, '../../../public');
 

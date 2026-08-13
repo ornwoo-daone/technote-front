@@ -10,6 +10,9 @@ export default defineConfig({
     { enforce: 'pre', ...mdx({ remarkPlugins: [remarkGfm], providerImportSource: '@mdx-js/react' }) },
     react(),
   ],
+  // React 셸이 쓰는 정적 자원은 repo 가 소유하는 static/ 에 둔다.
+  // public/ 은 C:\htmls\dbx-guide 로의 junction(레거시 사이트)이라 빌드 입력으로 쓰지 않는다.
+  publicDir: 'static',
   server: {
     port: 5173,
     open: '/',
