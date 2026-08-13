@@ -18,7 +18,7 @@
 | `dbpage.js` 스코프 검색 | `features/search/SearchBox.tsx` | ✅ |
 | `dbpage.js` 슬라이딩 pill (`.tab-slider`) | `pages/CategoryPage.tsx` | ✅ 2026-08-12 이식 |
 | `dbpage.js` 카드 스태거 애니메이션 (`.filt-show`) | — | ❌ **미이식** |
-| `dbpage.js` 검색창 플레이스홀더 타이핑 | — | ❌ **미이식** |
+| `dbpage.js` 검색창 플레이스홀더 타이핑 | `features/search/useTypedPlaceholder.ts` | ✅ 2026-08-13 이식 |
 | `deck.js` 슬라이드 이동 시 `scrollTo(0,0)` | — | ❌ **미이식** |
 | `deck.js` `location.hash` 로 시작 슬라이드 지정 | — | 🚫 이식 불가 (HashRouter 가 hash 를 씀) |
 | `deck.js` 화면 좌우 절반 클릭으로 넘김 | — | 🚫 의도적으로 제거 (오작동 유발) |
@@ -28,8 +28,6 @@
 - **카드 스태거 애니메이션** — `guide.css` 의 `.filt-show{animation:cardin .3s ease both}` +
   `animationDelay: index*45ms`. 탭을 바꿀 때 카드가 순차로 나타나던 효과.
   React 는 배열을 필터링만 하므로 즉시 나타난다.
-- **플레이스홀더 타이핑** — 검색창 placeholder 에 그 카테고리 문서 제목이 한 글자씩
-  타이핑됐다 지워지는 효과. 현재는 고정 문구.
 - **`scrollTo(0,0)`** — 긴 슬라이드에서 아래로 스크롤한 채 다음 장으로 넘기면
   스크롤 위치가 유지된다. 레거시는 맨 위로 올렸다.
 
