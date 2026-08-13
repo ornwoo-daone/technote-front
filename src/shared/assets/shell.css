@@ -66,6 +66,33 @@ box-shadow:0 0 0 4px rgba(229,72,77,.2)}
 color:var(--muted);font-weight:700;margin:0 0 12px 4px;display:flex;align-items:center;gap:12px}
 .hub-label::after{content:"";flex:1;height:1px;background:var(--line)}
 
+/* 카테고리 페이지 머리말 — 제목만 있으면 허전해서 홈 타일과 같은 로고를 얹는다.
+   guide.css 의 크기 보정(ci-big·ci-wt…)은 «.cat-btn .ci-img» 로 스코프돼 있어 여기선 안 먹는다.
+   그래서 같은 비율을 여기서 다시 준다 — 로고마다 여백이 달라 한 크기로는 안 맞는다. */
+.cat-hero{display:flex;align-items:center;gap:14px;margin:0 0 14px}
+.cat-hero h1{margin:0}
+.cat-hero .ci-img{width:54px;height:54px;object-fit:contain;flex:none;
+filter:drop-shadow(0 3px 5px rgba(0,0,0,.42))}
+.cat-hero .ci-img.ci-big{width:66px;height:66px}
+.cat-hero .ci-img.ci-mid{width:60px;height:60px}
+.cat-hero .ci-img.ci-ss{width:58px;height:58px}
+.cat-hero .ci-img.ci-gcp{width:72px;height:72px}
+.cat-hero .ci-img.ci-hana{width:77px;height:77px}
+.cat-hero .ci-img.ci-ncp{width:79px;height:79px}
+.cat-hero .ci-img.ci-sca{width:83px;height:83px}
+.cat-hero .ci-img.ci-wt{width:86px;height:86px}
+.cat-hero .ci-img.ci-tib{width:88px;height:88px}
+.cat-hero .ci-mono{display:inline-flex;align-items:center;justify-content:center;flex:none;
+width:54px;height:54px;border-radius:15px;font-family:var(--mono);font-size:20px;font-weight:700;
+color:var(--accent);border:1px solid var(--line);background:rgba(255,255,255,.05)}
+@media (max-width:520px){
+  .cat-hero{gap:10px}
+  .cat-hero .ci-img,.cat-hero .ci-mono{width:42px;height:42px}
+  .cat-hero .ci-img.ci-big,.cat-hero .ci-img.ci-mid,.cat-hero .ci-img.ci-ss,
+  .cat-hero .ci-img.ci-gcp,.cat-hero .ci-img.ci-hana,.cat-hero .ci-img.ci-ncp,
+  .cat-hero .ci-img.ci-sca,.cat-hero .ci-img.ci-wt,.cat-hero .ci-img.ci-tib{width:56px;height:56px}
+}
+
 /* 로고 파일이 없는 카테고리의 임시 글리프 — icon 지정 시 자동으로 <img> 로 대체됨 */
 .cat-btn .ci-mono{display:inline-flex;align-items:center;justify-content:center;
 width:60px;height:60px;border-radius:16px;font-family:var(--mono);font-size:22px;font-weight:700;

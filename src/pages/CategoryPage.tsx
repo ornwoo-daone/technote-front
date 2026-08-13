@@ -50,7 +50,12 @@ export default function CategoryPage() {
   return (
     <div className="wrap">
       <Link className="back" to="/" aria-label="홈으로" />
-      <h1>{meta.name}</h1>
+      <div className="cat-hero">
+        {meta.icon
+          ? <img className={'ci-img ' + (meta.iconCls ?? '')} src={meta.icon} alt="" aria-hidden="true" />
+          : <span className="ci-mono" aria-hidden="true">{meta.mono ?? '◆'}</span>}
+        <h1>{meta.name}</h1>
+      </div>
       <p className="lead">{meta.lead || `${meta.name} 에이전트 기능·개념·검증된 이슈.`}</p>
 
       {docs.length === 0 && (
