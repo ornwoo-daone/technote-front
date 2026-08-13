@@ -15,6 +15,10 @@ export default defineConfig({
   publicDir: 'static',
   server: {
     port: 5173,
+    // 포트가 밀리면 조용히 5174, 5175… 로 옮겨간다. 그런데 localStorage 는 포트까지
+    // 포함한 origin 단위로 분리되므로, 포트가 바뀌면 저장한 테마·읽음 기록이 «사라진 것처럼»
+    // 보인다. 그래서 밀려나지 말고 실패하게 둔다 — 이미 떠 있는 서버를 쓰라는 신호다.
+    strictPort: true,
     open: '/',
   },
   test: {
