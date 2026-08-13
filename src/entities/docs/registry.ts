@@ -34,6 +34,10 @@ export interface Doc {
   readonly session: string;
   /** YYYY-MM-DD */
   readonly at: string;
+  /** HH:mm. 작성 시각을 아는 문서만 넣는다 — 모르면 생략하고 날짜만 보여준다 */
+  readonly time?: string;
+  /** 마지막 수정 'YYYY-MM-DD HH:mm'. 생성 이후 고친 적이 있을 때만 넣는다 */
+  readonly up?: string;
   readonly t: string;
   readonly d: string;
   /** 검색 키워드 */
@@ -140,49 +144,49 @@ const CAT_LIST = [
 export const CATS: readonly Cat[] = CAT_LIST;
 
 export const DOCS: readonly Doc[] = [
-  { cat: 'security', slug: 'tls-basics', session: 'basic', at: '2026-08-13',
+  { cat: 'security', slug: 'tls-basics', session: 'basic', at: '2026-08-13', time: '10:23', up: '2026-08-13 10:38',
     t: 'TLS · 인증서 · AES 기초',
     d: '“TLS 코드가 없다”가 무슨 뜻인지부터 · SSL/TLS 차이 · mTLS · 코드 대조',
     k: 'tls ssl 기초 basic 보안 security 암호화 encryption 인증서 certificate ca 신뢰사슬 mtls mutual 상호인증 aes ecb cbc gcm 대칭키 비대칭키 symmetric asymmetric 공개키 평문 plaintext 핸드셰이크 handshake sslsocket sslcontext keymanager trustmanager 무결성 integrity 기밀성 confidentiality 인증 authentication tls1.2 tls1.3 poodle',
     load: () => import('./content/security/tls-basics.mdx') },
 
-  { cat: 'dbx', slug: 'agent-server-encryption', session: 'work', at: '2026-08-13',
+  { cat: 'dbx', slug: 'agent-server-encryption', session: 'work', at: '2026-08-13', time: '10:13', up: '2026-08-13 10:38',
     t: '에이전트 ↔ 수집서버 통신 암호화',
     d: 'TLS 미사용 근거 · 액세스키 핸드셰이크 · encrypt_level/cypher_level · 코드 줄번호 대조',
     k: '암호화 tls ssl encryption 통신 보안 uniadex 고객문의 액세스키 accesskey license pcode 핸드셰이크 handshake 세션키 sessionkey aes ecb xor hide cypher_level encrypt_level 6600 tcp 바이너리 프로토콜 인증서 certificate mtls 무결성 integrity 메타데이터 securitymaster tcpsession cypherconf datapacksender sender netflag jce unlimited strength',
     load: () => import('./content/dbx/agent-server-encryption.mdx') },
 
-  { cat: 'react', slug: 'fsd-architecture', session: 'deep', at: '2026-08-12',
+  { cat: 'react', slug: 'fsd-architecture', session: 'deep', at: '2026-08-12', time: '16:22', up: '2026-08-12 16:42',
     t: 'FSD 아키텍처 · 왜 이 구조를 쓰나',
     d: '6층 의존 규칙 · features 판단 기준 · 다른 아키텍처와의 차이 · 단점',
     k: 'fsd feature sliced design 아키텍처 구조 층 레이어 layer slice 의존 방향 import features entities widgets shared 판단 기준 atomic design clean architecture hexagonal bulletproof react mvc 폴더 구조 단점 순환 참조',
     load: () => import('./content/react/fsd-architecture.mdx') },
 
-  { cat: 'db2', slug: 'plan-data-journey', session: 'work', at: '2026-08-12',
+  { cat: 'db2', slug: 'plan-data-journey', session: 'work', at: '2026-08-12', time: '17:44', up: '2026-08-12 17:48',
     t: 'plan 데이터 여행 — 수집에서 depth까지',
     d: '실측 5행이 tree/parentMap/targetMap에 쌓이고 평행 배열이 되기까지, 행 단위 추적',
     k: 'plan 데이터 흐름 collectrow tree parentmap targetmap depthmap 평행 배열 listvalue populateplanlists 실측 ixscan 추적',
     load: () => import('./content/db2/plan-data-journey.mdx') },
 
-  { cat: 'db2', slug: 'calcdepth-edge-cases', session: 'work', at: '2026-08-12',
+  { cat: 'db2', slug: 'calcdepth-edge-cases', session: 'work', at: '2026-08-12', time: '17:01', up: '2026-08-13 12:38',
     t: 'calcDepth는 왜 무한재귀에 빠지나',
     d: '순환 데이터에서 굴러떨어지는 과정 스텝 추적 — 종료 조건 부재, 스택 폭발, 유입 경로',
     k: 'calcdepth 엣지케이스 원인 order by 없음 rank 필터 collectrow dag 공유 서브플랜 순환 자기참조 고아 행 밀림 stackoverflow explain_stream 5-key',
     load: () => import('./content/db2/calcdepth-edge-cases.mdx') },
 
-  { cat: 'db2', slug: 'calcdepth-parentmap', session: 'work', at: '2026-08-12',
+  { cat: 'db2', slug: 'calcdepth-parentmap', session: 'work', at: '2026-08-12', time: '16:29',
     t: 'calcDepth — tree DFS vs parentMap',
     d: '다중 뎁스에서 depth가 운에 좌우되는 이유와 parent_id 정합 해법. 도식+라인바이라인',
     k: 'calcdepth parentmap tree dfs depth 다중 뎁스 다이아몬드 순환 자기참조 고아 노드 들여쓰기 불일치 stackoverflow 무한재귀 가드',
     load: () => import('./content/db2/calcdepth-parentmap.mdx') },
 
-  { cat: 'db2', slug: 'db2-savingplan-design', session: 'work', at: '2026-08-12', deploy: 'pending',
+  { cat: 'db2', slug: 'db2-savingplan-design', session: 'work', at: '2026-08-12', time: '14:29', deploy: 'pending',
     t: 'SavingPlan 구현 설계 · 데이터 플로우',
     d: 'Oracle 구조 대조 → 변경 파일 5개 → DB2 고유 난점 3가지',
     k: 'db2 savingplan 구현 설계 데이터 플로우 subcountcollector instancesub activesessionlist 큐 delete staging plan change 오탐 버전가드 configure db2_plan_saving',
     load: () => import('./content/db2/db2-savingplan-design.mdx') },
 
-  { cat: 'db2', slug: 'savingplan-prereq', session: 'concept', at: '2026-08-12',
+  { cat: 'db2', slug: 'savingplan-prereq', session: 'concept', at: '2026-08-12', time: '14:29',
     t: 'SavingPlan에 필요한 DB2 지식',
     d: 'section·package cache·EXPLAIN 프로시저의 쓰기 부작용·plan 해시 부재',
     k: 'savingplan 개념 section executable_id package cache evict explain from section activity 5-key stream rank 권한 sysinstallobjects 버전',
@@ -245,6 +249,16 @@ export const docsOf = (cat: string): readonly Doc[] => DOCS.filter((d) => d.cat 
 export const findDoc = (cat: string, slug: string): Doc | undefined =>
   DOCS.find((d) => d.cat === cat && d.slug === slug);
 export const docKey = (d: Doc): string => d.cat + '/' + d.slug + '.html'; // 기존 dbxRead 키와 호환
+
+/** 생성 시각 표시용. time 이 없으면 날짜까지만 — 모르는 시각을 지어내지 않는다. */
+export const docWhen = (d: Doc): string => (d.time ? `${d.at} ${d.time}` : d.at);
+/** 수정 시각 표시용. 생성과 같은 값이면 «수정 없음» 으로 본다. */
+export const docUpdated = (d: Doc): string | undefined =>
+  d.up && d.up !== docWhen(d) ? d.up : undefined;
+/** 정렬용 키. 시각을 모르는 문서는 그날 00:00 으로 취급해 같은 날 안에서 뒤로 간다. */
+export const docStamp = (d: Doc): string => `${d.at} ${d.time ?? '00:00'}`;
+/** 마지막으로 «움직인» 시각 — 고친 적이 있으면 그 시각, 없으면 생성 시각. 신규·수정 감지의 기준. */
+export const docTouched = (d: Doc): string => d.up ?? docStamp(d);
 
 export const sessionsOf = (meta: Cat | undefined): readonly Session[] => meta?.sessions ?? SESSIONS;
 export const catsOfGroup = (g: GroupKey): readonly Cat[] => CATS.filter((c) => (c.g ?? 'db') === g);

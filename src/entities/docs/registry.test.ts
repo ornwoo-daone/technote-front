@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, statSync, lstatSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CATS, DOCS, GROUPS, SESSIONS, docKey, docsOf, findDoc, sessionsOf, catsOfGroup } from './registry';
+import { CATS, DOCS, GROUPS, SESSIONS, docKey, docWhen, docsOf, findDoc, sessionsOf, catsOfGroup } from './registry';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const contentDir = join(here, 'content');
@@ -91,6 +91,22 @@ describe('DOCS', () => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d.at)) return true;
       return Number.isNaN(Date.parse(d.at));
     }).map((d) => `${docKey(d)} (at: ${d.at})`);
+    expect(bad).toEqual([]);
+  });
+
+  it('time 이 HH:mm, up 이 YYYY-MM-DD HH:mm 이다', () => {
+    // 형식이 틀려도 화면엔 그 문자열이 그대로 찍힌다 — 에러가 안 난다
+    const bad = DOCS.filter((d) => {
+      if (d.time !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.time)) return true;
+      return d.up !== undefined && !/^\d{4}-\d{2}-\d{2} ([01]\d|2[0-3]):[0-5]\d$/.test(d.up);
+    }).map((d) => `${docKey(d)} (time: ${d.time}, up: ${d.up})`);
+    expect(bad).toEqual([]);
+  });
+
+  it('수정 시각이 생성 시각보다 앞서지 않는다', () => {
+    // 앞서면 «수정» 배지가 과거를 가리킨다. 사람 눈에만 이상하게 보이고 에러는 없다.
+    const bad = DOCS.filter((d) => d.up && d.up < docWhen(d))
+      .map((d) => `${docKey(d)} (생성 ${docWhen(d)} > 수정 ${d.up})`);
     expect(bad).toEqual([]);
   });
 

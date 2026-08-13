@@ -32,8 +32,12 @@ box-shadow:0 0 0 3px rgba(229,72,77,.18)}
 .nt-item.read .nt-dot{display:none}
 .nt-t{display:block;font-size:13.5px;font-weight:650;line-height:1.35;margin-bottom:3px}
 .nt-d{display:block;font-size:12px;color:var(--muted);line-height:1.5}
-.nt-m{display:flex;align-items:center;gap:7px;margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+/* 시각이 «YYYY-MM-DD HH:mm» 으로 길어져 카테고리 이름이 긴 경우 한 줄을 넘긴다 → 줄바꿈 허용 */
+.nt-m{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap}
 .nt-c{color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:2px 8px}
+/* «수정» 은 카테고리 pill 과 구분되게 채우지 않고 윤곽선만 — 목록 톤을 안 흐린다 */
+.nt-upd{color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);
+border-radius:99px;padding:1px 6px;font-size:10px;letter-spacing:.02em}
 .nt-mark{margin-left:auto;border:1px solid var(--line);background:none;color:var(--muted);
 font-size:10.5px;padding:2px 8px;border-radius:99px;cursor:pointer;font-family:var(--sans)}
 .nt-mark:hover{border-color:var(--accent);color:var(--accent)}
