@@ -51,6 +51,7 @@ export const GROUPS = [
   { key: 'lang', label: 'LANGUAGE' },
   { key: 'stack', label: 'BACKEND · FRONTEND' },
   { key: 'infra', label: 'INFRA · TOOLS' },
+  { key: 'cs', label: 'COMPUTER SCIENCE' },
 ] as const satisfies readonly { key: string; label: string }[];
 
 // 학습 카테고리 공통 세션 탭. 기술마다 탭을 따로 만들 이유가 없어서 문서 성격으로 나눈다.
@@ -60,6 +61,16 @@ const STUDY_SESSIONS = [
   { key: 'practice', label: '실습' },
   { key: 'deep', label: '심화' },
   { key: 'issue', label: '이슈' },
+] as const satisfies readonly Session[];
+
+// CS 기반 지식용 세션. 특정 도구가 아니라 «원리 → 적용 → 사례» 순으로 쌓이는 성격이라
+// STUDY_SESSIONS(기초/실습/심화/이슈)와 다르게 나눈다.
+const CS_SESSIONS = [
+  { key: 'all', label: 'ALL' },
+  { key: 'basic', label: '기초' },
+  { key: 'theory', label: '원리' },
+  { key: 'applied', label: '실무 적용' },
+  { key: 'case', label: '사례' },
 ] as const satisfies readonly Session[];
 
 // as const 로 f 리터럴을 살려 CatId 를 뽑고, 소비 측에는 아래에서 Cat 으로 넓혀 내보낸다.
@@ -101,9 +112,7 @@ const CAT_LIST = [
     lead: '영속성 컨텍스트·N+1·매퍼 XML·쿼리 튜닝 연계.' },
   { f: 'node', name: 'Node.js', g: 'stack', icon: '/assets/icons/nodejs.png', sessions: STUDY_SESSIONS,
     lead: '런타임·npm·번들러 툴체인.' },
-  // react 로고 파일이 없어서 임시 글리프. public/assets/icons/react.png 를 넣고
-  // mono 를 icon: '/assets/icons/react.png' 로 바꾸면 된다.
-  { f: 'react', name: 'React', g: 'stack', mono: '⚛', sessions: STUDY_SESSIONS,
+  { f: 'react', name: 'React', g: 'stack', icon: '/assets/icons/react.png', sessions: STUDY_SESSIONS,
     lead: '컴포넌트·훅·렌더링 모델. 이 사이트가 React 19.' },
   { f: 'css', name: 'CSS', g: 'stack', icon: '/assets/icons/css.png', sessions: STUDY_SESSIONS,
     lead: '레이아웃·반응형·커스텀 프로퍼티.' },
@@ -115,18 +124,29 @@ const CAT_LIST = [
     lead: '셸·프로세스·네트워크·로그 추적.' },
   { f: 'docker', name: 'Docker', g: 'infra', icon: '/assets/icons/docker.png', sessions: STUDY_SESSIONS,
     lead: '이미지·컨테이너·컴포즈·배포 파이프라인.' },
+
+  // ── 컴퓨터 사이언스 기반 지식 ──
+  // 특정 도구가 아니라 «어디서든 통하는 원리»를 모으는 자리. 세션 구성이 달라 CS_SESSIONS 를 쓴다.
+  { f: 'cs', name: '컴퓨터 사이언스', g: 'cs', icon: '/assets/icons/cs.png', sessions: CS_SESSIONS,
+    lead: 'OS·메모리·프로세스·컴파일. 언어를 가리지 않는 밑바탕.' },
+  { f: 'algorithm', name: '알고리즘', g: 'cs', icon: '/assets/icons/algorithm.png', sessions: CS_SESSIONS,
+    lead: '자료구조·복잡도·정렬/탐색. 코드가 느린 이유를 설명하는 언어.' },
+  { f: 'network', name: '네트워크', g: 'cs', icon: '/assets/icons/network.png', sessions: CS_SESSIONS,
+    lead: 'TCP/IP·HTTP·DNS·방화벽. 에이전트가 서버에 닿는 모든 길.' },
+  { f: 'security', name: '보안', g: 'cs', icon: '/assets/icons/security.png', sessions: CS_SESSIONS,
+    lead: 'TLS·인증서·암호 알고리즘. 고객사 보안 문의 대응의 기반 지식.' },
 ] as const satisfies readonly Cat[];
 
 export const CATS: readonly Cat[] = CAT_LIST;
 
 export const DOCS: readonly Doc[] = [
-  { cat: 'dbx', slug: 'tls-basics', session: 'support', at: '2026-08-13',
+  { cat: 'security', slug: 'tls-basics', session: 'basic', at: '2026-08-13',
     t: 'TLS · 인증서 · AES 기초',
     d: '“TLS 코드가 없다”가 무슨 뜻인지부터 · SSL/TLS 차이 · mTLS · 코드 대조',
     k: 'tls ssl 기초 basic 보안 security 암호화 encryption 인증서 certificate ca 신뢰사슬 mtls mutual 상호인증 aes ecb cbc gcm 대칭키 비대칭키 symmetric asymmetric 공개키 평문 plaintext 핸드셰이크 handshake sslsocket sslcontext keymanager trustmanager 무결성 integrity 기밀성 confidentiality 인증 authentication tls1.2 tls1.3 poodle',
-    load: () => import('./content/dbx/tls-basics.mdx') },
+    load: () => import('./content/security/tls-basics.mdx') },
 
-  { cat: 'dbx', slug: 'agent-server-encryption', session: 'support', at: '2026-08-13',
+  { cat: 'dbx', slug: 'agent-server-encryption', session: 'work', at: '2026-08-13',
     t: '에이전트 ↔ 수집서버 통신 암호화',
     d: 'TLS 미사용 근거 · 액세스키 핸드셰이크 · encrypt_level/cypher_level · 코드 줄번호 대조',
     k: '암호화 tls ssl encryption 통신 보안 uniadex 고객문의 액세스키 accesskey license pcode 핸드셰이크 handshake 세션키 sessionkey aes ecb xor hide cypher_level encrypt_level 6600 tcp 바이너리 프로토콜 인증서 certificate mtls 무결성 integrity 메타데이터 securitymaster tcpsession cypherconf datapacksender sender netflag jce unlimited strength',
