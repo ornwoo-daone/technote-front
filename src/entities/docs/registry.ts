@@ -120,6 +120,12 @@ const CAT_LIST = [
 export const CATS: readonly Cat[] = CAT_LIST;
 
 export const DOCS: readonly Doc[] = [
+  { cat: 'dbx', slug: 'agent-server-encryption', session: 'support', at: '2026-08-13',
+    t: '에이전트 ↔ 수집서버 통신 암호화',
+    d: 'TLS 미사용 근거 · 액세스키 핸드셰이크 · encrypt_level/cypher_level · 코드 줄번호 대조',
+    k: '암호화 tls ssl encryption 통신 보안 uniadex 고객문의 액세스키 accesskey license pcode 핸드셰이크 handshake 세션키 sessionkey aes ecb xor hide cypher_level encrypt_level 6600 tcp 바이너리 프로토콜 인증서 certificate mtls 무결성 integrity 메타데이터 securitymaster tcpsession cypherconf datapacksender sender netflag jce unlimited strength',
+    load: () => import('./content/dbx/agent-server-encryption.mdx') },
+
   { cat: 'react', slug: 'fsd-architecture', session: 'deep', at: '2026-08-12',
     t: 'FSD 아키텍처 · 왜 이 구조를 쓰나',
     d: '6층 의존 규칙 · features 판단 기준 · 다른 아키텍처와의 차이 · 단점',

@@ -1,0 +1,525 @@
+import './agent-server-encryption.css';
+
+<Slide kick="DBX 공통 · 고객 문의 대응">
+<h1>에이전트 ↔ 수집서버<br/>통신 암호화</h1>
+<Lead>“TLS 쓰나요? 프로토콜·TLS 버전은? 인증서 관리는?”<br/>— Uniadex JP 문의에 대한 답을, **실제 코드 근거와 함께** 정리한다.</Lead>
+<Muted>확인 대상: agentjava / whatap.agent.dbx 모듈 (2026-08-13 기준)</Muted>
+</Slide>
+
+<Slide kick="결론 먼저">
+## 세 줄 요약
+
+<Flow col steps={[
+  {t:'① TLS 를 쓰지 않는다', d:'에이전트→수집서버 구간에 SSL/TLS 코드가 아예 없다. 따라서 TLS 버전도, 서버 인증서 검증도, mTLS 도 없다.', bad:true},
+  {t:'② 대신 애플리케이션 계층에서 암호화한다', d:'자체 바이너리 프로토콜(TCP 6600) 위에서 본문만 XOR 또는 AES 로 처리한다.', accent:true},
+  {t:'③ 그래서 인증서 관리 대상이 없다', d:'접근 통제의 기준은 인증서가 아니라 프로젝트 액세스키다.'},
+]} />
+
+<Warn>“암호화한다”와 “TLS를 쓴다”는 **다른 말**이다. 이 차이가 이번 문의의 핵심이라
+다음 장에서 기초부터 짚는다.</Warn>
+</Slide>
+
+<Slide kick="기초 ①">
+## TLS 가 뭐길래
+
+**TLS**(Transport Layer Security, 전송 계층 보안)는 `https://` 의 그 **S** 다.
+전송 계층에 얹혀서 **세 가지를 한꺼번에** 보장한다.
+
+<div className="tscroll">
+
+| 보장 항목 | 뜻 | 없으면 |
+|---|---|---|
+| **기밀성** Confidentiality | 훔쳐봐도 내용을 모른다 | 도청으로 데이터가 읽힌다 |
+| **무결성** Integrity | 중간에 고치면 들킨다 | 조작해도 모른다 |
+| **인증** Authentication | 상대가 진짜인지 확인한다 | 가짜 서버에 접속해도 모른다 |
+
+</div>
+
+<div className="enc-d">
+<svg viewBox="0 0 660 200" role="img" aria-label="TLS 는 전송 계층에서 연결 전체를 감싸고, 애플리케이션 계층 암호화는 데이터 본문만 감싼다">
+  <defs>
+    <marker id="enc-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="enc-arm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+
+  <text className="lb" x="20" y="20">TLS 방식 (일반적인 HTTPS)</text>
+  <g className="bx good"><rect x="20" y="30" width="290" height="62" rx="10"/></g>
+  <g className="bx"><rect x="34" y="44" width="262" height="34" rx="7"/></g>
+  <text className="t1" x="48" y="66">헤더 + 본문 전부</text>
+  <text className="t2" x="196" y="66">← 연결 통째로 보호</text>
+  <text className="t2" x="20" y="112">버전 협상 · 인증서 검증 · 무결성 검사 포함</text>
+
+  <text className="lb" x="350" y="20">이 구간 (애플리케이션 계층)</text>
+  <g className="bx"><rect x="350" y="30" width="290" height="62" rx="10"/></g>
+  <g className="bx good"><rect x="470" y="44" width="156" height="34" rx="7"/></g>
+  <text className="t1" x="364" y="66">헤더</text>
+  <text className="t1" x="486" y="66">본문만 암호화</text>
+  <text className="t2" x="350" y="112">헤더는 평문 · 무결성 검사 없음 · 서버 인증 없음</text>
+
+  <text className="t2" x="20" y="150">TLS 는 «봉투 전체»를 봉인하고, 이 구간은 «편지지»만 봉인한 뒤 봉투 겉면은 그대로 둔다.</text>
+  <text className="t2" x="20" y="172">봉투 겉면(헤더)에는 프로젝트 식별자 같은 정보가 그대로 적혀 있다.</text>
+</svg>
+</div>
+</Slide>
+
+<Slide kick="확인 방법">
+## TLS 미사용을 어떻게 확인했나
+
+DBX 에이전트의 통신·데이터 전송 경로 전체를 검색했다.
+
+```bash
+# whatap.agent.dbx/src/main/java/whatap/dbx/{net,data}/
+grep -rn "SSLSocket|SSLContext|TLSv1|setEnabledProtocols"
+# → 검색 결과 없음 (주석 속 github 링크만 매칭)
+```
+
+연결을 만드는 곳은 <span className="enc-src">net/TcpSession.java:73–76</span> 한 곳이고,
+평범한 `java.net.Socket` 이다.
+
+```java
+Socket conn = new Socket();
+conn.connect(new InetSocketAddress(host, port), connection_timeout);
+```
+
+<Note>`SSLSocketFactory` 가 아니라 `new Socket()` 이다. **여기서 이미 TLS 가 아니다.**
+TLS 였다면 `SSLSocket` 이거나 최소한 `SSLContext` 초기화 코드가 있어야 한다.</Note>
+</Slide>
+
+<Slide kick="큰 그림">
+## 연결은 이렇게 만들어진다
+
+<div className="enc-d">
+<svg viewBox="0 0 660 300" role="img" aria-label="에이전트가 수집서버로 아웃바운드 TCP 6600 연결을 열고, 액세스키로 핸드셰이크한 뒤 세션키를 받아 데이터를 보낸다">
+  <g className="bx acc"><rect x="20" y="20" width="150" height="50" rx="10"/></g>
+  <text className="t1" x="38" y="42">DBX 에이전트</text>
+  <text className="t2" x="38" y="59">고객사 내부</text>
+
+  <g className="bx"><rect x="490" y="20" width="150" height="50" rx="10"/></g>
+  <text className="t1" x="508" y="42">수집서버</text>
+  <text className="t2" x="508" y="59">WhaTap</text>
+
+  <line className="lifeline" x1="95" y1="70" x2="95" y2="285"/>
+  <line className="lifeline" x1="565" y1="70" x2="565" y2="285"/>
+
+  <path className="ar" d="M95 100 L558 100"/>
+  <text className="lb" x="150" y="93">① TCP 연결 (아웃바운드 · 포트 6600)</text>
+
+  <path className="ar" d="M95 145 L558 145"/>
+  <text className="lb" x="150" y="138">② keyReset — 액세스키로 암호화한 인사말</text>
+  <text className="t2" x="150" y="160">"hello" + ONAME + IP</text>
+
+  <path className="ar-m" d="M565 195 L102 195"/>
+  <text className="lb" x="150" y="188">③ 세션 파라미터 응답</text>
+  <text className="t2" x="150" y="210">TRANSFER_KEY · SECURE_KEY · HIDE_KEY</text>
+
+  <path className="ar" d="M95 250 L558 250"/>
+  <text className="lb" x="150" y="243">④ 이후 데이터 전송 (세션키로 암호화)</text>
+  <text className="t2" x="150" y="265">연결이 끊겼다 붙을 때마다 ②③ 을 다시 한다</text>
+</svg>
+</div>
+
+**연결 방향이 중요하다** — 에이전트가 밖으로 나간다(아웃바운드). 수집서버가 고객사 안으로
+들어오지 않으므로, 방화벽에 인바운드 구멍을 뚫을 필요가 없다.
+</Slide>
+
+<Slide kick="코드 지도">
+## 어느 파일에 뭐가 있나
+
+모듈: `agentjava / io.whatap.java / whatap.agent.dbx`
+경로 기준: `src/main/java/whatap/dbx/`
+
+<div className="tscroll">
+
+| 파일 | 역할 | 핵심 줄 |
+|---|---|---|
+| `Configure.java` | 설정 기본값·로딩 | 74·75·87·547·602 |
+| `SecurityMaster.java` | 액세스키 → PCODE·마스터키 | 61–74 |
+| `net/TcpSession.java` | 연결·핸드셰이크·헤더 조립 | 62–138, 269–296, 321–331 |
+| `conf/CypherConf.java` | 세션키 보관·적용 | 16–37 |
+| `Cypher.java` | AES / XOR 구현체 | 40, 51, 70–87, 111–118 |
+| `data/DataPackSender.java` | encrypt_level → 플래그 결정 | 58–69 |
+| `net/Sender.java` | 실제 암호화 후 송신 | 58–85 |
+| `whatap/net/NetFlag.java` <small>(common 모듈)</small> | 보안 플래그 상수 | 4–5, 17–19 |
+
+</div>
+</Slide>
+
+<Slide kick="1단계">
+## 액세스키가 모든 것의 뿌리다
+
+**액세스키**(코드에서는 `license`)는 프로젝트마다 발급되는 문자열이다.
+여기서 두 가지가 나온다.
+
+<Flow steps={[
+  {t:'액세스키', d:'conf 파일의 license'},
+  {t:'PCODE', d:'프로젝트 식별 번호', accent:true},
+  {t:'마스터키', d:'AES 키로 쓰임', accent:true},
+]} />
+
+<span className="enc-src">SecurityMaster.java:61–74</span>
+
+```java
+String license = conf.license;
+if (StringUtil.isNotEmpty(license)) {
+    if (this.cypher == null || license.equals(last_license) == false) {
+        last_license = license;
+        resetLicense(license);      // 액세스키 파싱
+    }
+}
+// resetLicense 안에서
+this.PCODE  = key.pcode;                      // 프로젝트 식별자
+this.cypher = new Cypher(SECURE_KEY, 0);      // 마스터키로 AES 객체 생성
+```
+
+<Warn>액세스키가 유출되면 **그 프로젝트로 데이터를 보낼 수 있다.** 인증서가 없는 구조이므로
+액세스키가 사실상 유일한 자격 증명이다. 고객사 보관 관리가 중요한 이유다.</Warn>
+</Slide>
+
+<Slide kick="2단계">
+## 핸드셰이크 — 액세스키를 증명한다
+
+연결 직후 에이전트가 인사말을 보낸다. <span className="enc-src">net/TcpSession.java:269–296</span>
+
+```java
+byte[] msg = new DataOutputX()
+        .writeText("hello").writeText(secu.ONAME).writeInt(secu.IP).toByteArray();
+if (conf.cypher_level > 0) {
+    msg = secu.cypher.encrypt(msg);   // ← 마스터키(액세스키 기반) AES 로 암호화
+}
+out.writeByte(NetSrc.AGENT_JAVA_EMBED);
+out.writeByte(NetFlag.KEY_RESET);     // 또는 KEY_EXTENSION
+out.writeLong(SecurityMaster.getInstance().PCODE);   // 평문
+out.writeInt(SecurityMaster.getInstance().OID);      // 평문
+out.writeInt(trkey);
+out.writeIntBytes(msg);
+```
+
+수집서버는 그 PCODE 의 키로 `msg` 를 풀어본다. 못 풀면 등록을 거부한다.
+<span className="enc-src">net/TcpSession.java:257, 263–265</span>
+
+```java
+if (pcode != SecurityMaster.getInstance().PCODE || oid != ...OID) return null;
+// 실패 시
+"License key or invalid agent version error(fail key)"
+```
+
+<Note>여기서 알 수 있는 것 — **액세스키 자체는 네트워크에 흐르지 않는다.**
+액세스키로 만든 키로 암호화한 결과만 오간다. 서버가 그걸 풀 수 있으면 “같은 키를 안다”가
+증명된다. 다만 이건 **에이전트가 자신을 증명**하는 것이고, **서버가 자신을 증명하지는 않는다.**</Note>
+</Slide>
+
+<Slide kick="3단계">
+## 세션키 — 연결마다 새로 받는다
+
+서버 응답에는 이번 연결에서만 쓸 값들이 들어 있다.
+<span className="enc-src">conf/CypherConf.java:16–37</span>
+
+```java
+public static void updateNetCypherKey(byte[] data) {
+    if (conf.cypher_level > 0) {
+        // 마스터키(액세스키 기반)로 먼저 푼다
+        data = SecurityMaster.getInstance().cypher.decrypt(data, 0, data.length);
+    }
+    DataInputX in = new DataInputX(data);
+    TRANSFER_KEY = in.readInt();    // 헤더에 실려가는 식별값
+    SECURE_KEY   = in.readBlob();   // 이번 세션의 AES 키
+    HIDE_KEY     = in.readInt();    // 이번 세션의 XOR 키 (4바이트 = int)
+    cypher = new Cypher(SECURE_KEY, HIDE_KEY);
+}
+```
+
+<Flow steps={[
+  {t:'마스터키', d:'액세스키 기반 · 고정'},
+  {t:'세션키 전달', d:'마스터키로 암호화', accent:true},
+  {t:'세션키', d:'연결마다 새로 생성'},
+]} />
+
+<Muted>연결이 끊겼다 다시 붙으면 <span className="enc-src">TcpSession.java:112–127</span> 이 다시 돌면서
+세션키를 새로 받는다. 즉 **키는 연결 단위로 갱신**된다.</Muted>
+</Slide>
+
+<Slide kick="패킷 구조">
+## 무엇이 암호화되고 무엇이 안 되나
+
+<span className="enc-src">net/TcpSession.java:321–331</span> 이 실제로 소켓에 쓰는 형태다.
+
+<div className="enc-d">
+<svg viewBox="0 0 660 190" role="img" aria-label="패킷 헤더 5개 필드는 평문이고 마지막 본문만 암호화된다">
+  <g className="pk-plain">
+    <rect x="14" y="40" width="72" height="52" rx="7"/>
+    <rect x="92" y="40" width="72" height="52" rx="7"/>
+    <rect x="170" y="40" width="104" height="52" rx="7"/>
+    <rect x="280" y="40" width="80" height="52" rx="7"/>
+    <rect x="366" y="40" width="104" height="52" rx="7"/>
+  </g>
+  <g className="pk-enc"><rect x="476" y="40" width="170" height="52" rx="7"/></g>
+
+  <text className="pk-t" x="50"  y="62">NetSrc</text>   <text className="pk-s" x="50"  y="80">1바이트</text>
+  <text className="pk-t" x="128" y="62">code</text>     <text className="pk-s" x="128" y="80">1바이트</text>
+  <text className="pk-t" x="222" y="62">PCODE</text>    <text className="pk-s" x="222" y="80">8바이트</text>
+  <text className="pk-t" x="320" y="62">oid</text>      <text className="pk-s" x="320" y="80">4바이트</text>
+  <text className="pk-t" x="418" y="62">TRANSFER_KEY</text><text className="pk-s" x="418" y="80">4바이트</text>
+  <text className="pk-t" x="561" y="62">본문 (pack)</text>  <text className="pk-s" x="561" y="80">길이 + 데이터</text>
+
+  <text className="lb" x="14" y="28">평문 — 그대로 읽힌다</text>
+  <text className="lb" x="476" y="28">암호화 대상</text>
+
+  <text className="t2" x="14" y="126">PCODE 는 프로젝트 식별자다. 도청자는 «어느 프로젝트가 언제 얼마나 보내는지»를 알 수 있다.</text>
+  <text className="t2" x="14" y="148">내용(본문)은 모르지만 통신 사실·규모·상대는 드러난다 — 이를 «메타데이터 노출»이라 한다.</text>
+  <text className="t2" x="14" y="170">TLS 였다면 헤더까지 전부 암호화된다.</text>
+</svg>
+</div>
+</Slide>
+
+<Slide kick="설정">
+## encrypt_level — 본문을 어떻게 다룰지
+
+<span className="enc-src">data/DataPackSender.java:58–69</span> 에서 값에 따라 플래그가 갈린다.
+
+```java
+switch (conf.encrypt_level) {
+case 1:  TcpRequestMgr.getInstance().add(0, true, p);                     break;  // 평문
+case 2:  TcpRequestMgr.getInstance().add(NetFlag.SECURE_HIDE, true, p);   break;  // XOR
+case 3:
+default: TcpRequestMgr.getInstance().add(NetFlag.SECURE_CYPHER, true, p); break;  // AES
+}
+```
+
+그 플래그를 보고 <span className="enc-src">net/Sender.java:58–85</span> 가 실제로 처리한다.
+
+```java
+switch (NetFlag.getSecureMask(data.flag)) {
+case NetFlag.SECURE_HIDE:                       // encrypt_level=2 (기본)
+    b = CypherConf.cypher.hide(b);              // XOR
+    break;
+case NetFlag.SECURE_CYPHER:                     // encrypt_level=3
+    b = DataOutputX.toBytes(data.pack, conf.cypher_level / 8);  // 블록 크기 배수로 패딩
+    b = CypherConf.cypher.encryptBlock(b);      // AES
+    break;
+}
+```
+
+<div className="tscroll">
+
+| encrypt_level | 처리 | 보안 강도 |
+|---|---|---|
+| 1 | 평문 | <B>없음</B> |
+| **2 (기본값)** | XOR (4바이트 키 반복) | <W>매우 약함</W> |
+| 3 | AES | <G>실용적</G> |
+
+</div>
+
+<Muted>기본값은 <span className="enc-src">Configure.java:75</span> 의 `encrypt_level = 2` 다.</Muted>
+</Slide>
+
+<Slide kick="기초 ②">
+## XOR 이 왜 «약함» 인가
+
+**XOR**(exclusive or, 배타적 논리합)은 두 비트가 다르면 1, 같으면 0 인 연산이다.
+같은 키로 두 번 하면 원래대로 돌아온다 — 그래서 암·복호가 같은 코드다.
+
+<span className="enc-src">Cypher.java:111–118</span>
+
+```java
+public byte[] hide(byte[] b) {
+    for (int i = 0, j = 0; i < b.length; i++, j = (j + 1) % xor_key.length) {
+        b[i] ^= xor_key[j];      // xor_key 는 4바이트 (HIDE_KEY, int)
+    }
+    return b;
+}
+```
+
+<Warn>**4바이트 키를 계속 반복**해서 덮어씌우는 방식이다. 데이터에 반복되는 패턴이
+있으면(JSON 키 이름, 널 바이트 등) 키를 역산할 수 있다. 고전적으로 깨진 방식이라
+**«암호화»보다는 «가림»에 가깝다.** 코드의 메서드 이름이 `encrypt` 가 아니라
+`hide`(가리다)인 것도 그래서다.</Warn>
+
+<Note>즉 기본 설정(encrypt_level=2)은 **눈에 띄는 평문을 가리는 수준**이지,
+도청자에 대한 기밀성을 보장하지 않는다. 보안 요건이 있으면 반드시 3으로 올려야 한다.</Note>
+</Slide>
+
+<Slide kick="기초 ③">
+## AES 는 무엇의 약자인가
+
+**AES** = **A**dvanced **E**ncryption **S**tandard (고급 암호화 표준).
+2001년 미국 표준으로 채택된, 현재 사실상 전 세계 표준인 **대칭키 블록 암호**다.
+
+<div className="tscroll">
+
+| 용어 | 풀이 |
+|---|---|
+| **대칭키** symmetric | 암호화·복호화에 **같은 키**를 쓴다. 그래서 키를 안전하게 나눠 갖는 게 관건 |
+| **블록 암호** block cipher | 데이터를 **고정 크기 덩어리**(AES는 16바이트)로 잘라 처리한다 |
+| **AES-128 / 256** | **키 길이**가 128비트(16바이트) / 256비트(32바이트)라는 뜻. 블록 크기는 둘 다 16바이트로 같다 |
+| **ECB** | **E**lectronic **C**ode**B**ook. 블록을 **각각 독립적으로** 암호화하는 가장 단순한 방식 |
+| **NoPadding** | 모자란 부분을 채우는 규칙을 라이브러리에 맡기지 않고 직접 처리한다는 뜻 |
+
+</div>
+
+<span className="enc-src">Cypher.java:51</span> — 이 구간이 쓰는 조합이다.
+
+```java
+enc = Cipher.getInstance("AES/ECB/NoPadding");
+```
+
+<Muted>읽는 법: `알고리즘/운영모드/패딩방식`. 즉 **AES 알고리즘 · ECB 모드 · 패딩 직접 처리**.</Muted>
+</Slide>
+
+<Slide kick="주의" err>
+## ECB 모드의 약점
+
+ECB 는 블록을 각각 따로 암호화한다. 그래서 **같은 평문 블록은 항상 같은 암호문 블록**이 된다.
+
+<div className="enc-d">
+<svg viewBox="0 0 660 210" role="img" aria-label="ECB 모드에서 동일한 평문 블록 두 개가 동일한 암호문 블록으로 변환되어 반복 패턴이 드러난다">
+  <text className="lb" x="20" y="22">평문 블록</text>
+  <g className="blk">
+    <rect x="20"  y="34" width="96" height="40" rx="6" fill="var(--accent-soft)"/>
+    <rect x="126" y="34" width="96" height="40" rx="6" fill="var(--panel)"/>
+    <rect x="232" y="34" width="96" height="40" rx="6" fill="var(--accent-soft)"/>
+    <text x="68"  y="59">AAAA</text>
+    <text x="174" y="59">BBBB</text>
+    <text x="280" y="59">AAAA</text>
+  </g>
+
+  <path className="ar" d="M68 82 L68 112"/>
+  <path className="ar" d="M174 82 L174 112"/>
+  <path className="ar" d="M280 82 L280 112"/>
+  <text className="t2" x="350" y="102">← 각 블록을 «따로» 암호화</text>
+
+  <text className="lb" x="20" y="136">암호문 블록</text>
+  <g className="blk">
+    <rect x="20"  y="146" width="96" height="40" rx="6" fill="var(--bad-soft)"/>
+    <rect x="126" y="146" width="96" height="40" rx="6" fill="var(--panel)"/>
+    <rect x="232" y="146" width="96" height="40" rx="6" fill="var(--bad-soft)"/>
+    <text x="68"  y="171">7f3a</text>
+    <text x="174" y="171">c21e</text>
+    <text x="280" y="171">7f3a</text>
+  </g>
+  <text className="t2" x="350" y="160">같은 입력 → 같은 출력</text>
+  <text className="t2" x="350" y="180">반복 구조가 그대로 비친다</text>
+</svg>
+</div>
+
+<Warn>내용은 못 읽어도 **«같은 값이 반복된다»는 사실**이 드러난다. 그래서 현대 보안 권고에서는
+ECB 대신 CBC·GCM 같은 모드를 쓴다. 특히 **GCM 은 무결성 검증까지 함께 제공**한다.
+이 구간은 ECB 이므로 그 이점이 없다.</Warn>
+</Slide>
+
+<Slide kick="설정">
+## cypher_level — AES 키 길이
+
+<span className="enc-src">Configure.java:74, 547–548</span>
+
+```java
+public int cypher_level = 128;                       // 기본값
+// 로딩 시
+this.cypher_level = getInt("cypher_level", 128);
+this.cypher_level = this.cypher_level / 128 * 128;   // ← 128 의 배수로 내림
+```
+
+<span className="enc-src">Cypher.java:40</span> 에서 이 값이 블록·키 크기가 된다.
+
+```java
+this.BLOCK = conf.cypher_level / 8;   // 128→16바이트, 256→32바이트
+```
+
+<Note>**정수 나눗셈 때문에 128 의 배수로 내림된다.** `cypher_level=200` 으로 적으면
+경고 없이 **128 로 동작**한다. AES-256 을 쓰려면 정확히 `256` 이어야 한다.
+설정해 두고 안 먹는 사고가 나기 쉬운 지점이다.</Note>
+
+<div className="tscroll">
+
+| 설정값 | 실제 적용 | 비고 |
+|---|---|---|
+| 128 (기본) | AES-128 | |
+| 256 | AES-256 | JDK 에 따라 JCE Unlimited Strength 정책 필요 |
+| 200 | <B>128</B> | 내림 — 의도와 다르게 동작 |
+| 0 | 암호화 없음 | `Cypher.BLOCK==0` → 원문 그대로 반환 |
+
+</div>
+
+<Muted>AES-256 설정 문서: `docs.whatap.io/java/aes-256-encryption`</Muted>
+</Slide>
+
+<Slide kick="한계">
+## 이 구조에 «없는» 것
+
+암호화가 있다고 보안 요건이 다 충족되는 건 아니다. 앞서 본 TLS 의 세 가지 중
+**기밀성만 부분적으로** 있고 나머지는 없다.
+
+<div className="tscroll">
+
+| 항목 | 상태 | 의미 |
+|---|---|---|
+| 기밀성 | <W>조건부</W> | encrypt_level=3 일 때만. 기본값(2)은 XOR 이라 사실상 없음 |
+| 무결성 | <B>없음</B> | HMAC·MAC·체크섬 코드가 없다. 중간에 바꿔치기해도 탐지 못 함 |
+| 서버 인증 | <B>없음</B> | 에이전트가 접속한 상대가 진짜 수집서버인지 검증하지 않음 |
+| 상호 인증 (mTLS) | <B>없음</B> | 인증서 자체가 없음 |
+| 헤더 보호 | <B>없음</B> | PCODE 등 평문 노출 |
+
+</div>
+
+```bash
+# 무결성 검증 코드 존재 여부 확인
+grep -rn "Hmac|MessageDigest|checksum|CRC32" whatap/dbx/net/
+# → 결과 없음
+```
+
+<Warn>고객사 보안팀이 “전송 구간 보호”를 요구할 때는 보통 **이 세 가지를 모두** 뜻한다.
+애플리케이션 계층 암호화만으로는 답이 되지 않으므로, 망 계층 보호를 함께 제안해야 한다.</Warn>
+</Slide>
+
+<Slide kick="권장">
+## 요건별 권장 구성
+
+<Flow col steps={[
+  {t:'기밀성만 필요한 경우', d:'encrypt_level=3 + cypher_level=256 — 설정만으로 가능', accent:true},
+  {t:'기밀성 + 무결성 + 상대 인증이 모두 필요한 경우', d:'전용선 또는 IPsec VPN 등 망 계층 보호를 함께 구성. 애플리케이션 계층 암호화만으로는 충족 불가'},
+  {t:'공통', d:'액세스키가 유일한 자격 증명이므로 보관·유출 관리가 최우선'},
+]} />
+
+<div className="tscroll">
+
+| 설정 | 값 | 근거 |
+|---|---|---|
+| `encrypt_level` | 3 | `DataPackSender.java:58–69` |
+| `cypher_level` | 256 | `Configure.java:547–548` (128 배수만 유효) |
+
+</div>
+
+<Note>웹 콘솔(Front) 접속 구간은 **이 구간과 별개**다. 거기는 고객사 인증서를 등록해
+HTTPS 를 적용할 수 있으므로, 문의가 콘솔 쪽이면 답이 달라진다. 문의 범위를 먼저 확인할 것.</Note>
+</Slide>
+
+<Slide kick="정리">
+## 회신 내용 ↔ 코드 근거 대조
+
+<div className="tscroll">
+
+| 회신한 내용 | 코드 근거 | 확인 |
+|---|---|---|
+| TLS 미사용 | `net/`·`data/` 에 SSL/TLS 코드 없음, `TcpSession.java:73` `new Socket()` | <G>일치</G> |
+| TCP 6600 | `Configure.java:87`, `571` | <G>일치</G> |
+| 에이전트가 아웃바운드 개시 | `TcpSession.java:76` `conn.connect(...)` | <G>일치</G> |
+| 액세스키로 핸드셰이크 | `TcpSession.java:269–296`, `SecurityMaster.java:61–74` | <G>일치</G> |
+| 키 확인 실패 시 등록 거부 | `TcpSession.java:257`, `263–265` | <G>일치</G> |
+| 세션키를 연결마다 새로 생성 | `CypherConf.java:16–37`, `TcpSession.java:112–127` | <G>일치</G> |
+| 기본 encrypt_level=2, XOR 4바이트 | `Configure.java:75`, `Cypher.java:111–118` | <G>일치</G> |
+| AES 기본 128, 256 상향 가능 | `Configure.java:74`, `Cypher.java:40` | <G>일치</G> |
+| AES-ECB | `Cypher.java:51` | <G>일치</G> |
+| 헤더는 암호화 대상 아님 | `TcpSession.java:325–331` | <G>일치</G> |
+| 전송계층 무결성 검증 없음 | `net/` 에 HMAC·MessageDigest 없음 | <G>일치</G> |
+| 인증서 관리 대상 없음 | TLS 미사용의 귀결 | <G>일치</G> |
+
+</div>
+
+<Note>**회신문에 없었지만 알아두면 좋은 것 두 가지**
+① 핸드셰이크는 `encrypt_level` 과 무관하게 `cypher_level > 0` 이면 AES 로 보호된다
+(`TcpSession.java:273–275`). 즉 기본 설정에서도 **액세스키가 평문으로 흐르지는 않는다.**
+② `cypher_level` 은 128 의 배수로 내림된다. 어중간한 값은 조용히 128 로 동작한다.</Note>
+</Slide>

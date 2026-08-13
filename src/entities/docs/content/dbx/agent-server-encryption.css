@@ -1,0 +1,31 @@
+/* 에이전트 통신 암호화 덱 전용 도식 — .enc-d 아래로만 스코프 */
+.enc-d { margin: 16px 0 20px; }
+.enc-d svg { width: 100%; height: auto; display: block; max-width: 660px; margin: 0 auto; }
+.enc-d .cap { text-align: center; color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+/* 공통 박스 */
+.enc-d .bx rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+.enc-d .bx.acc rect { fill: var(--accent-soft); stroke: var(--accent); }
+.enc-d .bx.bad rect { fill: var(--bad-soft); stroke: var(--bad); }
+.enc-d .bx.good rect { fill: var(--good-soft); stroke: var(--good); }
+.enc-d .t1 { fill: var(--ink); font: 700 13px var(--mono); }
+.enc-d .t2 { fill: var(--muted); font: 400 11.5px var(--sans); }
+.enc-d .lb { fill: var(--accent); font: 700 11px var(--mono); letter-spacing: .1em; }
+
+/* 화살표 */
+.enc-d .ar { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#enc-ar); }
+.enc-d .ar-m { stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; marker-end: url(#enc-arm); }
+.enc-d .lifeline { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 3 5; }
+
+/* 패킷 구조 */
+.enc-d .pk-plain rect { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 1.4; }
+.enc-d .pk-enc rect { fill: var(--good-soft); stroke: var(--good); stroke-width: 1.4; }
+.enc-d .pk-t { fill: var(--ink); font: 700 11px var(--mono); text-anchor: middle; }
+.enc-d .pk-s { fill: var(--muted); font: 400 10px var(--mono); text-anchor: middle; }
+
+/* ECB 블록 */
+.enc-d .blk rect { stroke: var(--line); stroke-width: 1.2; }
+.enc-d .blk text { font: 700 11px var(--mono); text-anchor: middle; fill: var(--ink); }
+
+/* 코드 위치 표 안의 파일 경로 */
+.enc-src { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
