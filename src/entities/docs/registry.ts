@@ -95,7 +95,7 @@ const CAT_LIST = [
   { f: 'singlestore', name: 'SingleStore', icon: '/assets/icons/singlestore.png', iconCls: 'ci-ss' },
   { f: 'hana', name: 'SAP HANA', icon: '/assets/icons/hana.png', iconCls: 'ci-hana' },
   { f: 'scailium', name: 'Scailium', icon: '/assets/icons/scailium.png', iconCls: 'ci-sca' },
-  { f: 'dbx', name: 'DBX 공통', icon: '/assets/icons/whatap.png', iconCls: 'ci-wt' },
+  { f: 'dbx', name: 'DBX Common', icon: '/assets/icons/whatap.png', iconCls: 'ci-wt' },
 
   // ── 학습: 언어 ──
   { f: 'java', name: 'Java', g: 'lang', icon: '/assets/icons/java.png', sessions: STUDY_SESSIONS,
@@ -131,13 +131,13 @@ const CAT_LIST = [
 
   // ── 컴퓨터 사이언스 기반 지식 ──
   // 특정 도구가 아니라 «어디서든 통하는 원리»를 모으는 자리. 세션 구성이 달라 CS_SESSIONS 를 쓴다.
-  { f: 'cs', name: '컴퓨터 사이언스', g: 'cs', icon: '/assets/icons/cs.png', sessions: CS_SESSIONS,
+  { f: 'cs', name: 'Computer Science', g: 'cs', icon: '/assets/icons/cs.png', sessions: CS_SESSIONS,
     lead: 'OS·메모리·프로세스·컴파일. 언어를 가리지 않는 밑바탕.' },
-  { f: 'algorithm', name: '알고리즘', g: 'cs', icon: '/assets/icons/algorithm.png', sessions: CS_SESSIONS,
+  { f: 'algorithm', name: 'Algorithm', g: 'cs', icon: '/assets/icons/algorithm.png', sessions: CS_SESSIONS,
     lead: '자료구조·복잡도·정렬/탐색. 코드가 느린 이유를 설명하는 언어.' },
-  { f: 'network', name: '네트워크', g: 'cs', icon: '/assets/icons/network.png', sessions: CS_SESSIONS,
+  { f: 'network', name: 'Network', g: 'cs', icon: '/assets/icons/network.png', sessions: CS_SESSIONS,
     lead: 'TCP/IP·HTTP·DNS·방화벽. 에이전트가 서버에 닿는 모든 길.' },
-  { f: 'security', name: '보안', g: 'cs', icon: '/assets/icons/security.png', sessions: CS_SESSIONS,
+  { f: 'security', name: 'Security', g: 'cs', icon: '/assets/icons/security.png', sessions: CS_SESSIONS,
     lead: 'TLS·인증서·암호 알고리즘. 고객사 보안 문의 대응의 기반 지식.' },
 ] as const satisfies readonly Cat[];
 

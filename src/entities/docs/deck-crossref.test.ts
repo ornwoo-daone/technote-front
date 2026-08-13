@@ -31,9 +31,15 @@ const catName = (f: string): string => CATS.find((c) => c.f === f)?.name ?? f;
 /** 'INFRA · TOOLS' → ['INFRA · TOOLS', 'INFRA', 'TOOLS'] — 덱 본문은 보통 앞부분만 쓴다 */
 const parts = (label: string): string[] => [label, ...label.split('·').map((s) => s.trim())];
 
-/** 사람이 «카테고리 라벨»로 쓸 법한 모든 토큰 (카테고리 이름 + 홈 섹션 라벨) */
-const KNOWN_LABELS = [...CATS.map((c) => c.name), ...GROUPS.flatMap((g) => parts(g.label))]
-  .filter((s) => s.length >= 2);
+/**
+ * 제목 바로 앞에 붙은 «라벨 · » 을 뽑는다.
+ *
+ * 「현재 존재하는 라벨 목록에 있으면 검사」 방식으로 짜면 카테고리 «이름을 바꿨을 때»
+ * 옛 라벨(예: '보안' → 'Security')이 목록에서 사라져 감시망 밖으로 빠진다.
+ * 그래서 목록 대조가 아니라 «구두점 앞의 토큰» 자체를 뽑아 확인한다.
+ */
+const labelBefore = (before: string): string | undefined =>
+  /([^\s*«»·][^*«»·\n]{0,24}?)\s*·\s*«?$/.exec(before)?.[1]?.trim();
 
 /** 그 덱을 가리킬 때 «맞는» 라벨들 — 카테고리 이름이거나, 그 카테고리가 속한 섹션 라벨 */
 function acceptableLabels(cat: string): string[] {
@@ -56,11 +62,10 @@ describe('덱 상호 참조', () => {
           from = at + target.t.length;
           // 제목 앞 40자 안에서 라벨을 찾는다
           const before = deck.text.slice(Math.max(0, at - 40), at);
-          const ok = acceptableLabels(target.cat);
-          if (ok.some((n) => before.includes(n))) continue;          // 맞게 가리킴
-          const wrong = KNOWN_LABELS.filter((n) => before.includes(n))
-            .sort((a, b) => b.length - a.length)[0];
+          const wrong = labelBefore(before);
           if (!wrong) continue;                                      // 라벨 없이 제목만 언급 — 검사 대상 아님
+          const ok = acceptableLabels(target.cat);
+          if (ok.includes(wrong)) continue;                          // 맞게 가리킴
           bad.push(
             `${deck.cat}/${deck.slug}.mdx: «${target.t}» 를 "${wrong}" 로 가리키는데 ` +
             `실제는 "${catName(target.cat)}" (${ok.join(' / ')})`,
