@@ -138,6 +138,32 @@ describe('content 디렉토리', () => {
     }
     expect(found.filter((f) => !registered.has(f))).toEqual([]);
   });
+
+  it('레거시에만 있고 React 에 없는 덱이 없다', () => {
+    // 실제로 발생: 다른 작업에서 덱을 레거시 사이트(C:\htmls\dbx-guide)에만 쓰고
+    // registry.ts 를 안 고쳤다. 레거시 홈에는 보이는데 React 셸에는 존재하지 않는 문서가 되고,
+    // 카운트·검색·알림 어디에도 안 잡힌다. 에러가 없어서 «왜 감지를 못 하지» 로만 드러난다.
+    if (process.platform !== 'win32') return;              // junction 이 있는 로컬 셋업 전용
+    if (!existsSync(publicDir) || !lstatSync(publicDir).isSymbolicLink()) return; // 링크 검사는 위에서 따로 한다
+
+    const registered = new Set(DOCS.map(docKey));
+    const orphan: string[] = [];
+    for (const cat of readdirSync(publicDir)) {
+      const dir = join(publicDir, cat);
+      let isDir = false;
+      try { isDir = statSync(dir).isDirectory(); } catch { /* 접근 불가 항목은 건너뛴다 */ }
+      if (!isDir || cat === 'assets') continue;
+      for (const file of readdirSync(dir)) {
+        if (!file.endsWith('.html') || file === 'index.html') continue;
+        const key = `${cat}/${file}`;
+        if (!registered.has(key)) orphan.push(key);
+      }
+    }
+    expect(
+      orphan,
+      '레거시에만 있는 덱이다. MDX 로 옮기고 registry.ts 에 등록할 것 (mdx-authoring 규약 참고)',
+    ).toEqual([]);
+  });
 });
 
 describe('헬퍼', () => {

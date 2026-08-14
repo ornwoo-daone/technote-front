@@ -38,8 +38,10 @@ const parts = (label: string): string[] => [label, ...label.split('·').map((s) 
  * 옛 라벨(예: '보안' → 'Security')이 목록에서 사라져 감시망 밖으로 빠진다.
  * 그래서 목록 대조가 아니라 «구두점 앞의 토큰» 자체를 뽑아 확인한다.
  */
+// 글자·숫자·공백·마침표만 라벨로 본다. `<Note>관련:` `→` 같은 앞말까지 삼키면
+// "<Note>관련: DB2" 가 라벨로 잡혀 맞는 참조가 틀렸다고 나온다.
 const labelBefore = (before: string): string | undefined =>
-  /([^\s*«»·][^*«»·\n]{0,24}?)\s*·\s*«?$/.exec(before)?.[1]?.trim();
+  /([\p{L}\p{N}][\p{L}\p{N} .]{0,22}?)\s*·\s*«?$/u.exec(before)?.[1]?.trim();
 
 /** 그 덱을 가리킬 때 «맞는» 라벨들 — 카테고리 이름이거나, 그 카테고리가 속한 섹션 라벨 */
 function acceptableLabels(cat: string): string[] {
