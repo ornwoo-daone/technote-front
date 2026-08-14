@@ -1,0 +1,154 @@
+<Slide kick="DB2 CACHED PLAN · 엣지케이스">
+<h1>재귀 CTE 플랜은<br/><b>트리가 아니다</b></h1>
+<Lead>실행계획 depth 계산은 플랜이 **트리**라고 가정한다.
+그런데 재귀 CTE는 플랜에 **되돌이 간선**을 만들어 무한재귀를 일으킨다.
+감지해서 부분 데이터 대신 빈 결과를 보내는 처리를 정리한다.</Lead>
+<Muted>대상 `Db2Helper.java` · 재현 4.77 SPTESTDB · 브랜치 `feature/db2-cachedplan` (`cbc127d49`)</Muted>
+</Slide>
+
+<Slide kick="전제">
+## depth 계산은 트리를 가정한다
+
+<Flow steps={[
+  {t:'EXPLAIN_STREAM', d:'source→target 간선 목록'},
+  {t:'tree', d:'부모 → 자식들'},
+  {t:'calcDepth()', d:'루트(1)에서 자식으로 내려가며 +1', accent:true},
+]} />
+
+<Note>`calcDepth` 는 노드마다 부모가 하나인 **트리**를 전제로 재귀 하강한다.
+트리가 아니면(고리가 있으면) 같은 노드를 무한히 되탄다.</Note>
+</Slide>
+
+<Slide kick="원인">
+## 재귀 CTE의 자기 참조
+
+```sql
+-- emp_tree : FROM emp_tree 가 자기 자신을 다시 읽는다 (되돌이의 근원)
+WITH emp_tree(id, lvl) AS (
+  VALUES (1, 1)                                          -- 앵커
+  UNION ALL
+  SELECT id*2 + MOD(lvl,2), lvl+1 FROM emp_tree WHERE lvl < 23   -- 재귀 멤버 ①
+  UNION ALL
+  SELECT id*2 + 1,          lvl+1 FROM emp_tree WHERE lvl < 23   -- 재귀 멤버 ②
+) SELECT COUNT(*) FROM emp_tree;
+```
+
+- **앵커** — 시작 행. 자기 참조 없음
+- **재귀 멤버** — `FROM emp_tree` 로 직전 결과(공통 테이블)를 **되읽어** 다음 행 생성
+- 이 “공통 테이블을 여러 곳이 되읽는” 구조가 플랜에서 **공유 노드 + 되돌이 간선**이 된다
+</Slide>
+
+<Slide kick="진단 · EXPLAIN_STREAM">
+## 되돌이 = child가 여러 부모를 가진다
+
+| parent (target) | child (source) | operator | 비고 |
+|---|---|---|---|
+| 1 | 2 | RETURN | |
+| 3 | 4 | TBSCAN | |
+| 4 | 5 | TEMP | 공통 테이블 |
+| 5 | 6 · 7 · 8 | UNION | |
+| 6 | -1 | GENROW | <G>앵커 = 잎(끝)</G> |
+| 7 | <B>4</B> | TBSCAN | <B>← 되돌이</B> |
+| 8 | <B>4</B> | TBSCAN | <B>← 되돌이</B> |
+
+<Note>`child 4`(TEMP)가 부모를 **3개**(3·7·8) 가진다. 트리라면 부모는 1개여야 한다 → **비트리**.</Note>
+</Slide>
+
+<Slide kick="진단 · 한 줄로">
+## 부모 2개 이상인 노드 = 고리 진입점
+
+```sql
+-- DataGrip에서 직접 (whatap 접속). SET EXPLAIN MODE 로 실행 없이 플랜만.
+SET CURRENT EXPLAIN MODE EXPLAIN;
+WITH emp_tree(id,lvl) AS ( VALUES(1,1) UNION ALL ... ) SELECT COUNT(*) FROM emp_tree;
+SET CURRENT EXPLAIN MODE NO;
+
+-- 되돌이 진입점 탐지
+SELECT source_id AS child_id, COUNT(DISTINCT target_id) AS parent_count
+FROM WHATAP.EXPLAIN_STREAM
+WHERE EXPLAIN_TIME = (SELECT MAX(EXPLAIN_TIME) FROM WHATAP.EXPLAIN_STATEMENT)
+  AND source_id > 0
+GROUP BY source_id HAVING COUNT(DISTINCT target_id) > 1;
+-- 결과: child_id=4, parent_count=3
+```
+
+<Muted>EXPLAIN MODE는 쿼리를 **실행하지 않고** 플랜만 만든다 → 부하·UI 없이 언제든 재현 가능.</Muted>
+</Slide>
+
+<Slide kick="증상">
+## 가드가 없으면 StackOverflow
+
+```
+calcDepth: 1 → 2 → 3 → 4 → 5 → 7 → 4 → 5 → 7 → 4 → … ∞
+
+java.lang.StackOverflowError
+    at whatap.dbx.control.Db2Helper.calcDepth(Db2Helper.java:...)
+    at whatap.dbx.control.Db2Helper.calcDepth(Db2Helper.java:...)   // × 수천
+```
+
+<Warn>공유 노드 4를 방문 체크 없이 계속 타면 스택이 터진다.
+**가드** `if (depthMap.containsKey(node)) return true;` 로 “이미 본 노드는 다시 안 탄다”.</Warn>
+</Slide>
+
+<Slide kick="함정 · 반드시 짚을 것">
+## 조인이 간선을 2배로 읽는다
+
+<Warn>**EXPLAIN_STATEMENT 은 같은 플랜에 레벨별 다중 행**(O=원본 / P=플랜)을 가진다.
+에이전트의 3-way 조인이 이 다중 행에 각각 붙어 **모든 간선을 2배**로 반환한다.</Warn>
+
+| | 중복 안 거르면 |
+|---|---|
+| 재귀 플랜 | <G>어차피 비트리 → 빈 결과 (문제 없음)</G> |
+| 정상 플랜(순수 트리) | <B>간선 중복(DUP=2) → calcDepth가 되돌이로 **오탐** → 정상 플랜도 빈 결과!</B> |
+
+<Note>그래서 **중복 간선 제거가 먼저**다. 안 하면 정상 플랜까지 막히고, 로그도 되돌이마다 찍혀 폭주한다(11줄).</Note>
+</Slide>
+
+<Slide kick="수정 · Db2Helper.java">
+## 세 곳 — 비트리면 빈 결과
+
+| 위치 | 변경 |
+|---|---|
+| `collectRow` | <G>**중복 간선 제거** — 같은 child가 이미 있으면 tree에 안 넣음. 조인 배수 무력화 → 정상 플랜 오탐 방지</G> |
+| `calcDepth` | `void→boolean`. 되돌이 감지 시 `true` 를 위로 전파(로그는 안 찍음) |
+| `populatePlanLists` | 비트리면 채우기 전 `Logger.red` **1줄** + `return` → 빈 결과 |
+
+```java
+// collectRow — 중복 간선 제거
+List<Integer> children = ctx.tree.computeIfAbsent(targetId, k -> new ArrayList<>());
+if (!children.contains(sourceId)) children.add(sourceId);
+
+// populatePlanLists — 비트리면 빈 결과 + 로그 1회
+if (calcDepth(ctx.tree, 1, 0, ctx.depthMap)) {
+    Logger.red("Db2 plan: non-tree (recursive/cyclic) plan detected - sending empty result.");
+    return;
+}
+```
+
+<Note>3경로(`planCached` · `planFromActivity` · `plan`)가 모두 `populatePlanLists` 를 지난다 → **한 곳 수정으로 전부 커버**.</Note>
+</Slide>
+
+<Slide kick="검증 · 4.77 SPTESTDB">
+## 정상은 그대로, 재귀만 빈 결과
+
+| 케이스 | 플랜 화면 | 로그 |
+|---|---|---|
+| 정상 플랜(조인·집계) | <G>RETURN→GRPBY→HSJOIN→… 온전히 표시</G> | 없음 |
+| 재귀 CTE(emp_tree) | <W>빈 결과 (부분 데이터 없음)</W> | <G>1줄 (StackOverflow 없음)</G> |
+
+- 중복 간선 제거 **전** — 정상 플랜도 오탐 + 로그 11줄
+- 제거 **후** — 정상 통과 · 재귀만 빈 결과 · 로그 1줄
+
+<Muted>로그: `Db2 plan: non-tree (recursive/cyclic) plan detected - sending empty result.`</Muted>
+</Slide>
+
+<Slide kick="정리">
+## 왜 이렇게 처리했나
+
+- **재귀 CTE = 공유 노드(공통 TEMP)를 여러 곳이 되읽음** → 플랜은 트리가 아니라 고리 있는 그래프
+- **부분 데이터는 오히려 해롭다** — 잘린 트리를 보내면 서버·UI가 잘못 그린다 → 아예 빈 결과
+- **중복 간선 제거가 선행** — 안 하면 정상 플랜까지 비트리로 오탐
+- **다음(선택)** — 프론트에서 “재귀 플랜은 표시 불가” 배지 또는 공유 노드 재참조 표시(DAG 뷰)
+
+<Note>관련: DB2 · «Plan depth 슬라이드 덱» (트리·depth 계산 기초) · DB2 · «Plan 코드 리팩터 (공용화·스레드 안전)» (3경로 공용화)</Note>
+</Slide>

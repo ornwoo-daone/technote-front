@@ -1,0 +1,154 @@
+<Slide kick="DB2 CACHED PLAN · 디스크 경로">
+<h1>디스크에서<br/><b>플랜 데이터</b>를 가져온다</h1>
+<Lead>package cache(메모리)는 evict되면 사라진다. 지나간 SQL의 plan을 확보하려면
+**활동 이벤트 모니터**가 디스크에 캡처해 둔 section을 `EXPLAIN_FROM_ACTIVITY` 로 복원한다.</Lead>
+<Muted>실측 4.77 SPTESTDB · `Db2Helper.planFromActivity` · evmon `WHATAP_ACT`</Muted>
+</Slide>
+
+<Slide kick="왜 디스크인가">
+## 메모리는 사라지고, 디스크는 남는다
+
+| | package cache (메모리) | activity event monitor (디스크) |
+|---|---|---|
+| 저장 위치 | 메모리 | <G>디스크 테이블</G> |
+| 수명 | <B>LRU evict → 사라짐</B> | <G>명시 삭제 전까지 유지</G> |
+| 입력 키 | `executable_id` | `appl_id + uow_id + activity_id` |
+| 복원 프로시저 | `EXPLAIN_FROM_SECTION` | `EXPLAIN_FROM_ACTIVITY` |
+
+<Note>evict된 뒤 `FROM_SECTION` 을 부르면 explain_time OUT이 **NULL**(실패). “지나간 SQL의 plan”을 보장하려면 디스크 경로가 필요하다.</Note>
+</Slide>
+
+<Slide kick="큰 그림">
+## 디스크 경로 4단계
+
+<Flow steps={[
+  {t:'활동 실행', d:'고객 SQL이 돌 때'},
+  {t:'이벤트 모니터', d:'section을 디스크 테이블에 캡처', accent:true},
+  {t:'EXPLAIN_FROM_ACTIVITY', d:'3-key로 section → EXPLAIN_* 복원'},
+  {t:'tree / depth', d:'STREAM 간선 → 트리 → 서버', accent:true},
+]} />
+
+<Note>뒤쪽 2단계(EXPLAIN_* 복원 → 트리/depth)는 `FROM_SECTION` 경로와 **완전히 동일**하다. 앞의 2단계(디스크 캡처)만 다르다.</Note>
+</Slide>
+
+<Slide kick="1단계 · 준비">
+## 활동 이벤트 모니터 = 디스크 테이블 5개
+
+```sql
+-- DBA가 한 번 생성. WRITE TO TABLE = 디스크에 적재
+CREATE EVENT MONITOR WHATAP_ACT FOR ACTIVITIES WRITE TO TABLE;
+```
+
+| 테이블 (접미사 = evmon명) | 담는 것 |
+|---|---|
+| <G>`ACTIVITY_WHATAP_ACT`</G> | 활동 1건 = 1행. 식별 3-key + 시각 |
+| <G>`ACTIVITYSTMT_WHATAP_ACT`</G> | **SQL 텍스트 + section** (plan 복원의 원천) |
+| `ACTIVITYVALS_WHATAP_ACT` | 바인드 입력값 |
+| `ACTIVITYMETRICS_WHATAP_ACT` | 활동 지표 |
+| `CONTROL_WHATAP_ACT` | 파티션·제어 메타 |
+
+<Muted>실측(4.77): `WRITE TO TABLE` 하나로 위 5개가 자동 생성된다.</Muted>
+</Slide>
+
+<Slide kick="2단계 · 무엇이 담기나 (실측 컬럼)">
+## 디스크에 들어오는 데이터
+
+| ACTIVITY_* | 타입 |
+|---|---|
+| <G>`APPL_ID`</G> | VARCHAR |
+| <G>`UOW_ID`</G> | INTEGER |
+| <G>`ACTIVITY_ID`</G> | BIGINT |
+| ACTIVITY_TYPE | VARCHAR |
+| TIME_STARTED / COMPLETED | TIMESTAMP |
+
+| ACTIVITYSTMT_* | 타입 |
+|---|---|
+| <G>`APPL_ID · UOW_ID · ACTIVITY_ID`</G> | (같은 3-key) |
+| `EXECUTABLE_ID` | VARCHAR |
+| `STMT_TEXT` | CLOB |
+| <W>`SECTION_ENV`</W> | BLOB |
+
+<Note>**3-key**(`APPL_ID·UOW_ID·ACTIVITY_ID`)가 활동 식별자. `SECTION_ENV`(BLOB)가 실제 실행 section → 이걸로 **돌아간 그 plan**을 복원한다.</Note>
+</Slide>
+
+<Slide kick="3단계 · 복원">
+## EXPLAIN_FROM_ACTIVITY 호출
+
+```java
+// Db2Helper.callExplainFromActivity — 입력 3-key + evmon, OUT 5-key
+CALL SYSPROC.EXPLAIN_FROM_ACTIVITY(
+    ?,          // 1 appl_id
+    ?,          // 2 uow_id
+    ?,          // 3 activity_id
+    'WHATAP_ACT',  // 4 event monitor 이름
+    ?,          // 5 EXPLAIN_SCHEMA (INOUT) — 입력=모니터링 스키마
+    ?, ?, ?, ?, ? // 6~10 OUT: REQUESTER, TIME, SOURCE_NAME/SCHEMA/VERSION
+);
+```
+
+<Warn>`FROM_SECTION` 과 똑같이 **EXPLAIN_* 테이블에 write** 하고 **OUT 5-key**(어디에 썼는지 좌표)를 돌려준다. 이름만 다르고 산출물은 동일하다.</Warn>
+</Slide>
+
+<Slide kick="4단계 · 이후는 동일">
+## 그 다음은 FROM_SECTION과 완전히 같다
+
+<Flow steps={[
+  {t:'OUT 5-key', d:'EXPLAIN_TIME 등'},
+  {t:'3-way join', d:'STATEMENT · OPERATOR · STREAM'},
+  {t:'tree · depth', d:'SOURCE→TARGET 간선 → calcDepth'},
+  {t:'서버', d:'id/parent_id/depth 배열', accent:true},
+]} />
+
+<Note>읽기 코어(`fetchPlanRows → collectRow → populatePlanLists`)는 3경로 공용. 그래서 **비트리(재귀 CTE) 빈 결과 처리**도 이 경로에 그대로 적용된다. → DB2 · «재귀 CTE 플랜은 트리가 아니다»</Note>
+</Slide>
+
+<Slide kick="대조">
+## FROM_SECTION vs FROM_ACTIVITY
+
+| | EXPLAIN_FROM_SECTION | EXPLAIN_FROM_ACTIVITY |
+|---|---|---|
+| 소스 | package cache (메모리) | <G>activity event monitor (디스크)</G> |
+| 입력 | `executable_id` | `appl_id + uow_id + activity_id` |
+| 캐시 evict | <B>영향 받음 (사라지면 실패)</B> | <G>무관</G> |
+| 사전 준비 | <G>없음</G> | <B>DBA가 event monitor 생성 필요</B> |
+| 디스크 누적 | EXPLAIN staging만 | <B>event monitor 도 자동 prune 없음</B> |
+
+<Note>기본 경로는 **FROM_SECTION**. FROM_ACTIVITY는 **evict를 반드시 피해야 하는 경우**(지나간 SQL 보장)의 디스크 경로.</Note>
+</Slide>
+
+<Slide kick="사전 준비 & 함정">
+## 준비가 필요하고, 디스크는 안 지워진다
+
+- **이벤트 모니터 생성** — DBA가 `CREATE EVENT MONITOR ... FOR ACTIVITIES WRITE TO TABLE`
+- **활동 수집 활성화** — 워크로드에 `COLLECT ACTIVITY DATA` + `SET EVENT MONITOR ... STATE 1`
+- **section 캡처 옵션** — plan 복원하려면 section 정보까지 수집되도록 설정해야 `SECTION_ENV` 가 채워진다
+- **정리 책임** — EXPLAIN staging + 이벤트모니터 테이블 **둘 다** 자동 삭제 없음
+
+<Warn>이벤트모니터 테이블이 가득 차면 오래된 걸 밀어내는 게 아니라 **수집이 비활성화**되고 재활성화도 `SQL1630N` 으로 거부된다. → DB2 · «Plan 저장 disk 누적 이슈 (실측)»</Warn>
+</Slide>
+
+<Slide kick="전체 그림">
+## 데이터가 DB에서 들어오는 흐름
+
+<Flow col steps={[
+  {t:'① 고객 SQL 실행', d:'활동 이벤트 모니터가 감시 중'},
+  {t:'② [디스크] ACTIVITYSTMT_*', d:'3-key + EXECUTABLE_ID + STMT_TEXT + SECTION_ENV 적재', accent:true},
+  {t:'③ EXPLAIN_FROM_ACTIVITY(3-key, evmon)', d:'section을 풀어 EXPLAIN_* 에 write'},
+  {t:'④ [디스크] EXPLAIN_STATEMENT / OPERATOR / STREAM', d:'OUT 5-key 좌표로 존재', accent:true},
+  {t:'⑤ 3-way join + rank=1', d:'SOURCE→TARGET 간선 목록'},
+  {t:'⑥ 에이전트 tree/depth → TagCountPack → 서버', d:'id·parent_id·depth 배열', accent:true},
+]} />
+
+<Muted>②·④가 디스크에 실제로 “쓰이는” 지점. 읽고 나면 ④(EXPLAIN staging)는 5-key 스코프로 DELETE 해야 누적이 안 쌓인다.</Muted>
+</Slide>
+
+<Slide kick="정리">
+## 구현 시 결정할 것
+
+- **언제 이 경로를 쓰나** — evict를 피해야 할 때(지나간/느린 SQL). 기본은 FROM_SECTION
+- **준비 비용** — 고객 DB에 이벤트 모니터 + 활동 수집 설정이 필요 (FROM_SECTION은 무설정)
+- **정리 전략** — EXPLAIN staging은 읽은 직후 DELETE, 이벤트모니터 테이블은 주기 prune 정책 필요
+- **코어 재사용** — 복원 이후는 공용 코어 그대로 → 트리/depth·비트리 처리 자동 상속
+
+<Note>관련: DB2 · «SavingPlan에 필요한 DB2 지식» · DB2 · «Plan depth 슬라이드 덱» · DB2 · «Plan 저장 disk 누적 이슈 (실측)»</Note>
+</Slide>

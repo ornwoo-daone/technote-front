@@ -156,6 +156,18 @@ export const DOCS: readonly Doc[] = [
     k: '암호화 tls ssl encryption 통신 보안 uniadex 고객문의 액세스키 accesskey license pcode 핸드셰이크 handshake 세션키 sessionkey aes ecb xor hide cypher_level encrypt_level 6600 tcp 바이너리 프로토콜 인증서 certificate mtls 무결성 integrity 메타데이터 securitymaster tcpsession cypherconf datapacksender sender netflag jce unlimited strength',
     load: () => import('./content/dbx/agent-server-encryption.mdx') },
 
+  { cat: 'db2', slug: 'plan-from-activity', session: 'work', at: '2026-08-13', time: '17:54',
+    t: '디스크에서 플랜 데이터를 가져온다',
+    d: 'EXPLAIN_FROM_ACTIVITY · 활동 이벤트 모니터 · FROM_SECTION 과의 대조',
+    k: 'plan from activity explain_from_activity 활동 이벤트 모니터 event monitor 디스크 disk evict package cache appl_id uow_id activity_id 3-key section_env blob whatap_act activitystmt collect activity data sql1630n staging prune db2helper planfromactivity 복원',
+    load: () => import('./content/db2/plan-from-activity.mdx') },
+
+  { cat: 'db2', slug: 'recursive-cte-plan', session: 'work', at: '2026-08-13', time: '17:38',
+    t: '재귀 CTE 플랜은 트리가 아니다',
+    d: '되돌이 간선 감지 → 부분 데이터 대신 빈 결과. 중복 간선 제거가 선행',
+    k: '재귀 cte recursive 플랜 비트리 non-tree 고리 cycle 되돌이 무한재귀 stackoverflow calcdepth collectrow populateplanlists 중복 간선 오탐 explain_stream 공유 노드 temp union all 앵커 anchor emp_tree db2helper 빈 결과 explain mode',
+    load: () => import('./content/db2/recursive-cte-plan.mdx') },
+
   { cat: 'react', slug: 'fsd-architecture', session: 'deep', at: '2026-08-12', time: '16:22', up: '2026-08-12 16:42',
     t: 'FSD 아키텍처 · 왜 이 구조를 쓰나',
     d: '6층 의존 규칙 · features 판단 기준 · 다른 아키텍처와의 차이 · 단점',
