@@ -22,6 +22,7 @@ CLAUDE.md            ← 루트. 매 세션 자동 로드 + rules/ 를 @import
 │  ├─ react-component/   컴포넌트·훅·전역 상태 패턴
 │  ├─ build-tooling/     Vite/webpack 양쪽 반영 체크리스트
 │  ├─ new-category/      카테고리 타일 추가
+│  ├─ new-deck/          덱 작성 (⛔ MDX 강제 — 레거시 HTML 금지)
 │  ├─ study-note/        학습 노트(덱) 작성
 │  └─ deck-review/       새로 쓴 덱 검증 (사실·렌더·배치·상호 참조)
 ├─ commands/         사용자가 `/이름` 으로 직접 부르는 명령

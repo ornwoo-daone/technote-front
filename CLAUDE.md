@@ -19,6 +19,11 @@ npm run build       # typecheck → test → webpack (앞이 실패하면 빌드
 - **빌드가 둘**이다. 빌드 설정을 건드리면 `vite.config.js` 와 `webpack.config.js` **양쪽 다** 반영.
 - **문서 등록의 단일 소스는 [registry.ts](src/entities/docs/registry.ts)** 하나뿐이다.
   화면(홈/카테고리/검색/알림)은 전부 여기서 파생된다.
+- ⛔ **덱은 반드시 MDX 로 만든다.** `src/entities/docs/content/<cat>/<slug>.mdx` +
+  `registry.ts` 에 한 줄. **레거시 HTML(`public/` = `C:\htmls\dbx-guide`)로 새 덱을 쓰지 않는다.**
+  거기 쓰면 레거시 홈에만 보이고 React 셸에는 «존재하지 않는 문서»가 된다 — 카운트·검색·알림
+  어디에도 안 잡히고 에러도 안 난다. 2026-08-13 에 실제로 덱 2개가 이 상태로 방치됐다.
+  절차는 `new-deck` 스킬. `npm run test` 가 미등록 덱을 잡는다.
 
 ## 규칙 (상세)
 

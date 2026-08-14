@@ -1,6 +1,6 @@
 ---
 name: study-note
-description: 학습 카테고리(Java·JavaScript·TypeScript·Python·C·Spring·JPA/MyBatis·Node.js·React·CSS·Git·Linux·Docker)에 공부한 내용을 덱으로 정리할 때 사용. "React 훅 정리해줘", "GC 공부한 거 노트로", "이거 덱으로 만들어줘" 같은 요청. 기존 HTML 덱을 옮기는 변환 작업은 rules/mdx-authoring.md 쪽이다.
+description: 학습 카테고리(Java·JavaScript·TypeScript·Python·C·Spring·JPA/MyBatis·Node.js·React·CSS·Git·Linux·Docker)에 공부한 내용을 덱으로 정리할 때 사용. "React 훅 정리해줘", "GC 공부한 거 노트로" 같은 요청. DB·DBX 실무나 CS 기반 지식 덱은 new-deck 쪽이다. 기존 HTML 덱을 옮기는 변환 작업은 rules/mdx-authoring.md.
 ---
 
 # 학습 노트 작성

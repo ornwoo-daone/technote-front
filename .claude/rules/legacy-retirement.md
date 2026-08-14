@@ -60,6 +60,10 @@ React 쪽 스타일 수정은 `static/assets/guide.css` 나 `src/shared/assets/s
 
 ## 그 전까지의 규칙
 
+- ⚠️ **새 덱은 반드시 MDX(`src/entities/docs/content/`)로 쓰고 `registry.ts` 에 등록한다.**
+  레거시 HTML 로 쓰면 레거시 홈에만 보이고 React 셸에는 «존재하지 않는 문서»가 된다 —
+  카운트·검색·알림 어디에도 안 잡히고 에러도 없다. 2026-08-13 에 실제로 덱 2개가 이 상태였다.
+  `registry.test.ts` 의 «레거시에만 있고 React 에 없는 덱이 없다» 가 이제 이걸 잡는다.
 - **React 스타일 수정은 `static/` 과 `src/` 에만 한다.** `public/` 은 건드리지 않는다.
 - 레거시에서 뭔가 안 보인다는 보고가 오면 고치지 말고 **은퇴 일정을 당길지 먼저 묻는다.**
 - 남은 미이식 기능 목록은 `legacy-parity.md` 참고 — 은퇴하면 이식할 필요가 없어지는 항목도 있다.
