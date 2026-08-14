@@ -10,7 +10,12 @@ const babel = {
   loader: 'babel-loader',
   options: {
     presets: [
-      ['@babel/preset-react', { runtime: 'automatic' }],
+      // ⚠️ development 를 명시하지 않으면 Babel 8 이 envName(BABEL_ENV || NODE_ENV || 'development')
+      // 을 보고 개발용으로 판단해 `import { jsxDEV } from "react/jsx-dev-runtime"` 를 뽑는다.
+      // 그런데 webpack production 은 react 의 «운영» jsx-dev-runtime 을 넣는데 거기엔
+      // jsxDEV 가 undefined 다 → 화면이 통째로 안 뜬다(검정 화면). 빌드는 성공한다.
+      // 이 webpack 설정은 운영 전용이므로 false 로 못박는다. NODE_ENV 에 의존하지 않는다.
+      ['@babel/preset-react', { runtime: 'automatic', development: false }],
       // 타입 제거만 담당 (타입 검사는 npm run typecheck)
       '@babel/preset-typescript',
     ],

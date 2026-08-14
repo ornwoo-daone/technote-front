@@ -54,3 +54,35 @@ describe('실제 컴파일 결과', () => {
     expect(out).not.toContain('_components.table');
   });
 });
+
+describe('운영 번들의 JSX 런타임', () => {
+  // 사고 이력: webpack 의 babel 설정에 development 를 안 적어서 Babel 8 이
+  // envName(BABEL_ENV || NODE_ENV || 'development')을 보고 개발용으로 판단,
+  // `import { jsxDEV } from "react/jsx-dev-runtime"` 를 뽑았다.
+  // webpack production 이 넣는 react 의 «운영» jsx-dev-runtime 은 jsxDEV 가 undefined 라
+  // 첫 렌더에서 TypeError → 화면이 통째로 검게 뜬다. 빌드·타입·테스트는 전부 통과한다.
+  // dist/ 를 아무도 안 열어봐서 오래 방치됐다.
+  it('webpack 의 babel 이 운영용 jsx-runtime 을 쓴다', async () => {
+    const { transformAsync } = await import('@babel/core');
+    // webpack.config.js 가 실제로 쓰는 옵션을 그대로 가져와 돌린다 (문자열 검사로는 못 잡는다)
+    const cfg = await import(join(root, 'webpack.config.js'));
+    const rules: unknown = (cfg.default as { module: { rules: unknown[] } }).module.rules;
+    const first = (rules as { use?: { options?: unknown } }[])[0]?.use;
+    const options = (first as { options?: object } | undefined)?.options;
+    expect(options, 'babel-loader 옵션을 못 찾았다').toBeTruthy();
+
+    const out = await transformAsync('export const A = () => <div/>;', {
+      filename: 'sample.tsx',
+      configFile: false,
+      babelrc: false,
+      // ⚠️ 실제 `npm run build` 는 NODE_ENV 가 비어 있어 Babel 이 envName 을 'development' 로
+      // 잡는다. 반면 vitest 는 NODE_ENV=test 를 넣어 그 조건이 재현되지 않는다 →
+      // 여기서 못박아야 «설정에 development:false 가 없으면 실패» 가 성립한다.
+      envName: 'development',
+      ...(options as object),
+    });
+    const code = out?.code ?? '';
+    expect(code, '개발용 런타임(jsxDEV)이 운영 번들에 들어간다').not.toContain('jsx-dev-runtime');
+    expect(code).toContain('react/jsx-runtime');
+  });
+});
