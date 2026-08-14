@@ -156,6 +156,12 @@ export const DOCS: readonly Doc[] = [
     k: '암호화 tls ssl encryption 통신 보안 uniadex 고객문의 액세스키 accesskey license pcode 핸드셰이크 handshake 세션키 sessionkey aes ecb xor hide cypher_level encrypt_level 6600 tcp 바이너리 프로토콜 인증서 certificate mtls 무결성 integrity 메타데이터 securitymaster tcpsession cypherconf datapacksender sender netflag jce unlimited strength',
     load: () => import('./content/dbx/agent-server-encryption.mdx') },
 
+  { cat: 'db2', slug: 'plan-error-codes', session: 'verify', at: '2026-08-14', time: '13:20',
+    t: 'plan 조회 때 뜨는 에러 코드',
+    d: '[Code]/[Error]/[SQL] 전달 규약 · 경로별로 갈리는 코드 · -219/-551/-204/-206 실측',
+    k: 'plan 에러 코드 error code sqlcode -104 -204 -206 -219 -551 sql0104n sql0204n sql0206n sql0219n sql0551n 권한 permission explain 테이블 없음 undefined name 컬럼 column 문법 syntax evict 코드 없음 geterrorcode daoproxy lasterrorcode buildErrorHint 릴레이 cached plan explain plan from activity 경로 운영 고객 오류',
+    load: () => import('./content/db2/plan-error-codes.mdx') },
+
   { cat: 'db2', slug: 'plan-from-activity', session: 'work', at: '2026-08-13', time: '17:54',
     t: '디스크에서 플랜 데이터를 가져온다',
     d: 'EXPLAIN_FROM_ACTIVITY · 활동 이벤트 모니터 · FROM_SECTION 과의 대조',

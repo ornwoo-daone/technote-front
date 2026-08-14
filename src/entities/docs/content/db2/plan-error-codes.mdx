@@ -1,0 +1,123 @@
+<Slide kick="DB2 CACHED PLAN · 에러 코드">
+<h1>plan 조회 때<br/>뜨는 <b>에러 코드</b></h1>
+<Lead>plan 조회가 실패하면 트리 대신 **DB가 준 에러 코드**를 팩에 담아 보낸다.
+어떤 코드가 언제 뜨는지, 어느 경로에서 뜨는지 실측으로 정리한다.</Lead>
+<Muted>실측 4.77 SPTESTDB · `Db2Helper.plan` / `planCached` / `planFromActivity`</Muted>
+</Slide>
+
+<Slide kick="형식">
+## 에러는 `[Code]` / `[Error]` / `[SQL]` 로 온다
+
+plan 실패 시 결과에 리스트 3개가 담긴다.
+
+- `[Code]` — DB 네이티브 에러 코드 (SQLCODE)
+- `[Error]` — 메시지
+- `[SQL]` — 문제의 SQL
+
+```java
+} catch (SQLException e) {
+    L.result.newList("[Code]").add(e.getErrorCode());   // DB가 준 SQLCODE
+    L.result.newList("[Error]").add(buildErrorHint(e));
+}
+```
+
+<Note>서버는 키가 `[Code]`·`[Error]`·`[SQL]` 세 개면 «에러»로 인식한다(OraHelper:896). 이 규약은 모든 DB 헬퍼(Ora·Tib·Ms·Cub·Alti·Db2) 공통이다.</Note>
+</Slide>
+
+<Slide kick="개념">
+## 코드는 "미리 아는" 게 아니라 릴레이
+
+- `getErrorCode()` = JDBC가 주는 **DB 벤더 코드**. 사람이 정하는 게 아니다
+- 무슨 코드가 날지 몰라도 된다 — DB가 던진 걸 **그대로 전달**
+- 처음 보는 코드도 자동 전달. `buildErrorHint` 는 **아는 코드만** 친화 메시지를 붙인다
+
+<Note>그래서 아래 목록은 "자주 보는 대표값"이지 전부가 아니다. `-911`(lock timeout) `-805`(package) 등도 상황 따라 그대로 나온다.</Note>
+</Slide>
+
+<Slide kick="실측">
+## plan 조회에서 실제로 난 코드 (4.77)
+
+| 상황 | 코드 | 실측 |
+|---|---|---|
+| SQL 문법 오류 | `-104` (SQL0104N) | <G>✓</G> |
+| 참조 객체 없음 | `-204` (SQL0204N) | <G>✓</G> |
+| 참조 컬럼 없음 | `-206` (SQL0206N) | <G>✓</G> |
+| EXPLAIN 테이블 없음 | `-219` (SQL0219N) | <G>✓</G> |
+| 권한 없음 | `-551` (SQL0551N) | <G>✓</G> |
+
+<Muted>다섯 개 모두 4.77 SPTESTDB에서 직접 재현했다.</Muted>
+</Slide>
+
+<Slide kick="핵심">
+## 어느 경로로 조회하냐에 따라 갈린다
+
+| 코드 | Cached Plan (액티브세션) | Explain Plan (SQL텍스트) | Disk Plan (activity) |
+|---|---|---|---|
+| `-204` / `-206` | <B>✗</B> | <G>✓</G> | <B>✗</B> |
+| `-219` | <G>✓</G> | <G>✓</G> | <G>✓</G> |
+| `-551` | <G>✓</G> | <G>✓</G> | <G>✓</G> |
+
+<Note>`-204`/`-206`은 **SQL 텍스트를 다시 컴파일**하는 Explain Plan에서만 난다. Cached/Disk는 이미 컴파일된 section을 복원하므로 이름 재해석을 안 한다.</Note>
+</Slide>
+
+<Slide kick="자주 ①">
+## `-219` · EXPLAIN 테이블 없음
+
+- 모니터링 스키마에 EXPLAIN 테이블이 없을 때. **배포 초기 최다**
+- 생성: `CALL SYSPROC.SYSINSTALLOBJECTS('EXPLAIN','C',NULL,'<SCHEMA>')`
+- 환경 전역이라 **아무 플랜에서나** 즉시 뜬다
+
+<Warn>실측: WHATAP 스키마 EXPLAIN 테이블 삭제 → `SQL0219N "WHATAP.EXPLAIN_INSTANCE" does not exist`. Cached Plan·Explain Plan 양쪽 다 막힌다.</Warn>
+</Slide>
+
+<Slide kick="자주 ②">
+## `-551` · 권한 없음 — 두 종류
+
+- **① 프로시저 실행 권한 없음** — 모니터링 계정에 `EXPLAIN_FROM_SECTION` EXECUTE 없음 → Cached Plan `-551`
+- **② 숨은 함정** — Explain Plan이 별도 plan 계정으로 도는데, 읽는 EXPLAIN 스키마가 접속 계정과 안 맞으면 `WHATAP;SELECT;DB2INST3.EXPLAIN_STATEMENT` `-551`
+
+<Warn>②는 **정상 SQL의 플랜도 못 뜨게 하는 설정 버그**다. plan 계정(`conf.plan_user`)과 EXPLAIN 테이블 스키마가 어긋나면 발생 — 운영에서 Explain Plan 자체가 안 된다.</Warn>
+</Slide>
+
+<Slide kick="가끔">
+## `-204` / `-206` · 스키마 변경
+
+- 과거 SQL을 Explain Plan 하는데 그 사이 **테이블/컬럼이 삭제·변경**됨
+- `-204` 테이블 없음 · `-206` 컬럼 없음
+- **도는 쿼리로는 절대 불가** — 없는 객체를 조회하는 쿼리는 실행조차 안 되니 액티브 세션에 뜨질 못한다
+
+<Note>실측: `PLANTEST_204` 드롭 → `-204`, `PLANTEST_206`의 `oldcol` 제거 → `-206`. **SQL 통계 + Explain Plan 탭**에서만 확인된다.</Note>
+</Slide>
+
+<Slide kick="자주인데 코드가 없다">
+## Cached Plan evict — 최다인데 코드 없음
+
+- package cache에서 section이 밀려나면 `EXPLAIN_FROM_SECTION` 의 explain_time OUT이 **NULL**
+- 운영 "plan 안 뜸"의 **최다 케이스**
+- 그런데 지금은 `[Code]` 없이 **메시지만** 간다 (`Db2Helper.java:274`)
+
+<Warn>고객·지원팀이 "권한 문제인지 / 그냥 캐시에서 밀렸는지"를 코드로 구분 못 한다. DB가 코드를 안 주는 상황이라, 알리려면 **자체 코드를 정의**해야 하는 지점이다.</Warn>
+</Slide>
+
+<Slide kick="운영 관점">
+## 고객이 실제로 보는 것
+
+| 빈도 | 코드 |
+|---|---|
+| <G>매우 흔함</G> | `-219`(설치) · `-551`(권한) · evict(코드 없음) |
+| 가끔 | `-204` · `-206` (스키마 변경 + Explain Plan) |
+| 드묾 | `-104` (돌던 SQL은 이미 파싱 통과) |
+
+<Muted>"코드로 안내"할 거면 주력은 `-219`·`-551`. 그 외 DB 원본 코드는 그대로 전달된다.</Muted>
+</Slide>
+
+<Slide kick="정리">
+## 한 장 요약
+
+- **형식**(`[Code]`/`[Error]`/`[SQL]`)은 서버·프론트 합의, **값**은 DB 원본을 릴레이
+- 주력 `-219`·`-551`, 가끔 `-204`·`-206`, 최다 evict는 **코드 없음**
+- Explain Plan은 plan 계정/스키마가 안 맞으면 `-551`로 깨질 수 있다(별건 버그)
+- 코드는 로직이 아니라 **데이터** — 새 에러 유형도 코드 수정 없이 자동 전달
+
+<Note>관련: DB2 · «SavingPlan에 필요한 DB2 지식» · DB2 · «디스크에서 플랜 데이터를 가져온다» · DB2 · «재귀 CTE 플랜은 트리가 아니다»</Note>
+</Slide>
